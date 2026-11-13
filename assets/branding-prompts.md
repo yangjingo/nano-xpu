@@ -2,7 +2,7 @@
 
 2026-11-13。使用内置 `image_gen` 编辑生成，未使用 CLI/API fallback。
 
-README 使用 `nanoxpu-banner-v2.png`，显示宽度 560px。配套独立图标为 `nanoxpu-icon-v2.png`，带 alpha 透明通道。旧版 Nano-XPU 横幅、图标及未使用的 nano-vllm 标识已删除；历史素材仍可从 Git 提交 `b734b0b797d58e9b5e470dec420c187709d4f4fd` 查阅。
+README 使用 `nanoxpu-banner-v2.png`，左对齐并以正文区域的 100% 宽度显示。配套独立图标为 `nanoxpu-icon-v2.png`，带 alpha 透明通道。旧版 Nano-XPU 横幅、图标及未使用的 nano-vllm 标识已删除；历史素材仍可从 Git 提交 `b734b0b797d58e9b5e470dec420c187709d4f4fd` 查阅。
 
 方向：保留四臂 X 与芯片互联意象，简化中心细节，使用深石墨色和低饱和浅绿；去掉原版金属浮雕、重阴影和粒子波纹。横幅只保留名称，不通过图像宣称尚未实现的异构能力。
 
