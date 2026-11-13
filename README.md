@@ -1,5 +1,5 @@
 <p align="center">
-<img width="360" src="assets/nanoxpu-banner.png" alt="Nano-XPU">
+<img width="560" src="assets/nanoxpu-banner-v2.png" alt="Nano-XPU — lightweight LLM inference runtime">
 </p>
 
 # Nano-XPU
