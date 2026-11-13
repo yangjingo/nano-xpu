@@ -1,3 +1,9 @@
+# Local validation environments and browser artifacts
+.cpu-deps/
+.venv-server/
+.playwright-cli/
+output/playwright/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

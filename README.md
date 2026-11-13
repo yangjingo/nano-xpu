@@ -98,6 +98,13 @@ For the full stage-by-stage plan — including the Ascend-first PD path
 (A2 → A3 → cross-generation → cross-vendor) and the Week 1 milestones — see
 **[docs/roadmap.md](docs/roadmap.md)**.
 
+The serving plan is **[RFC-0001: `nano-xpu serve`, model splitting, and CPU-first
+validation](docs/rfcs/0001-serve-qwen-colocated.md)**. The CLI and HTTP service layer
+are implemented with **43 passing CPU tests**. Real Qwen inference, CUDA, and
+multi-GPU TP serving remain **unverified on hardware**. See the
+[CPU verification guide](docs/rfcs/README-cpu.md) for setup and a test-only server;
+the production CLI uses the CUDA engine and has no CPU inference fallback.
+
 ## Acknowledgements
 
 Nano-XPU is built upon [nano-vllm](https://github.com/GeeeekExplorer/nano-vllm)

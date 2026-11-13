@@ -32,9 +32,14 @@ class LLMEngine:
         self.tokenizer = AutoTokenizer.from_pretrained(config.model, use_fast=True)
         config.eos = self.tokenizer.eos_token_id
         self.scheduler = Scheduler(config)
+        self._closed = False
         atexit.register(self.exit)
 
     def exit(self):
+        if self._closed:
+            return
+        self._closed = True
+        atexit.unregister(self.exit)
         self.model_runner.call("exit")
         del self.model_runner
         for p in self.ps:

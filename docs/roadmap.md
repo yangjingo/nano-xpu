@@ -14,6 +14,12 @@ Nano-XPU 基于 [nano-vllm](https://github.com/GeeeekExplorer/nano-vllm) 演进�
 
 > 核心工程原则：**Nano-XPU 先成为社区算子的集成器与异构运行时，再成为性能算子的创新者。**
 
+### 当前优先交付：Server 拉起 Qwen P/D 合部服务
+
+先完成本地 CPU 服务链路验证，再通过 `nano-xpu serve <model-path>` 验收 CUDA 上的 Qwen3 P/D 合部、TP 多卡切分和 chunked prefill，随后推进多实例、Ascend 合部与 P/D 分离。具体 Issue 草案、接口、示例脚本和验收见 [RFC-0001：通过 nano-xpu serve 启动 Qwen P/D 合部服务](rfcs/0001-serve-qwen-colocated.md)。
+
+该 RFC 状态为**草案；S0 服务层已实现并通过 43 项 CPU 测试，真实 Qwen/CUDA/TP 待设备验收**。首版“混合部署”指 Prefill/Decode 合部执行；不代表 GPU/NPU 异构协同已经可用。RFC 的 S0–S5 为服务化交付顺序，本文件 Phase 0–5 为异构运行时演进，两者分别验收；当前已完成 S0，下一步为 S1，不以完整后端抽象为其前置条件。
+
 ---
 
 ## 1. 项目定位
@@ -402,6 +408,8 @@ bench 矩阵：离线 correctness bench（固定 Golden）+ 在线 throughput/la
 ---
 
 ## 10. Week 1 计划
+
+> 以下为原 Ascend 适配主线的 Week 1 计划。当前近期实施顺序以 [RFC-0001 的 S0/S1](rfcs/0001-serve-qwen-colocated.md#8-实施顺序与验收) 为先；原计划中的未完成项仍是后续 Ascend Gate，不能视为已完成或 server 拉起的必要前置。
 
 > Week 1 不自研新 Kernel，而是建立社区算子复用体系，并最大可能拼接出 Ascend 最小执行路径。
 

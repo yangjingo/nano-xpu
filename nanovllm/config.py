@@ -1,6 +1,11 @@
+from __future__ import annotations
+
 import os
 from dataclasses import dataclass
-from transformers import AutoConfig
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from transformers import AutoConfig
 
 
 @dataclass(slots=True)
@@ -11,6 +16,7 @@ class Config:
     max_model_len: int = 4096
     gpu_memory_utilization: float = 0.9
     tensor_parallel_size: int = 1
+    distributed_port: int = 2333
     enforce_eager: bool = False
     hf_config: AutoConfig | None = None
     eos: int = -1
@@ -18,6 +24,8 @@ class Config:
     num_kvcache_blocks: int = -1
 
     def __post_init__(self):
+        from transformers import AutoConfig
+
         assert os.path.isdir(self.model)
         assert self.kvcache_block_size % 256 == 0
         assert 1 <= self.tensor_parallel_size <= 8
