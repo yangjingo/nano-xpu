@@ -105,6 +105,14 @@ multi-GPU TP serving remain **unverified on hardware**. See the
 [CPU verification guide](docs/rfcs/README-cpu.md) for setup and a test-only server;
 the production CLI uses the CUDA engine and has no CPU inference fallback.
 
+For new proposals, use the [RFC template](.github/ISSUE_TEMPLATE/rfc.md) and
+the [RFC writing guide and index](docs/rfcs/README.md).
+For bug reports, feature requests, and pull requests, see the
+[Issue and PR templates](.github/README.md).
+
+See [Contributing](CONTRIBUTING.md) and [CPU CI](docs/ci.md) for local checks,
+the CI scope, and GitHub setup instructions.
+
 ## Acknowledgements
 
 Nano-XPU is built upon [nano-vllm](https://github.com/GeeeekExplorer/nano-vllm)

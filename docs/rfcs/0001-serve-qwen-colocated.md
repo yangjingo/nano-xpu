@@ -275,4 +275,4 @@ S 阶段描述服务化交付，既有 Phase 描述异构运行时能力，两�
 
 服务生命周期采用 [FastAPI lifespan](https://fastapi.tiangolo.com/advanced/events/)，CPU 接口测试参考 [FastAPI testing](https://fastapi.tiangolo.com/tutorial/testing/)，请求字段使用 [Pydantic strict mode](https://docs.pydantic.dev/latest/concepts/strict_mode/) 避免把字符串或布尔值隐式转为数值参数。
 
-设计说明 [HTML](0001-serve-qwen-colocated.html) 与本 RFC 保持同一方案，已回填 CPU 验证结果。本机 Python 3.12 可直接运行；新建虚拟环境的启动器被 Windows Application Control 拒绝，因此本轮使用可运行的 Python 3.12 原解释器与仓库内独立依赖目录，不修改系统策略。
+本 RFC 已回填 CPU 验证结果。本机 Python 3.12 可直接运行；新建虚拟环境的启动器被 Windows Application Control 拒绝，因此本轮使用可运行的 Python 3.12 原解释器与仓库内独立依赖目录，不修改系统策略。

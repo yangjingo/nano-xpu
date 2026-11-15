@@ -1,0 +1,5 @@
+# Tooling only. Runtime CPU test dependencies live in tests/requirements-cpu.txt.
+ruff==0.14.4
+build==1.3.0
+setuptools==80.9.0
+wheel==0.45.1
