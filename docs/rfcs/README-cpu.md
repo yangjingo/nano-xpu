@@ -1,5 +1,7 @@
 # 本地 CPU 验证：nano-xpu serve 服务入口与切分参数
 
+> 入口更新：本文保留早期服务设计记录。当前配置启动和 CPU 示例以[部署说明](../deployment.md)及其链接为准；旧直接模型命令已停止支持。
+
 本说明对应 [RFC-0001](0001-serve-qwen-colocated.md) 的 S0。测试引擎只在 `tests/` 中提供合成响应，**不会加载 Qwen，不证明真实模型推理或 TP 多卡正确**。
 
 自动化工作流、wheel 安装验证与 CI 验收结果见 [CPU CI 指南](../ci.md)。

@@ -8,6 +8,7 @@ import nanoxpu
 from nanoxpu.server.config import ServerConfig
 from nanoxpu.server.engine import InvalidRequest, NanoEngine
 from nanoxpu.server.schema import ChatRequest
+from tests.helpers.support import write_model_fixture
 
 
 class Tokenizer:
@@ -41,6 +42,7 @@ class LLMStub:
 
 @pytest.fixture
 def engine(tmp_path, monkeypatch):
+    write_model_fixture(tmp_path)
     hf = SimpleNamespace(model_type="qwen3", max_position_embeddings=8192,
                          num_attention_heads=16, num_key_value_heads=8,
                          hidden_size=1024, intermediate_size=4096, vocab_size=1000)

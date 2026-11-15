@@ -3,6 +3,7 @@ import torch
 import torch.distributed as dist
 from multiprocessing.synchronize import Event
 from multiprocessing.shared_memory import SharedMemory
+from nanoxpu.engine.identity import shared_memory_name
 
 from nanoxpu.config import Config
 from nanoxpu.engine.sequence import Sequence
@@ -40,11 +41,11 @@ class ModelRunner:
 
         if self.world_size > 1:
             if rank == 0:
-                self.shm = SharedMemory(name="nanoxpu", create=True, size=2**20)
+                self.shm = SharedMemory(name=shared_memory_name(config.instance_id, config.engine_generation), create=True, size=2**20)
                 dist.barrier()
             else:
                 dist.barrier()
-                self.shm = SharedMemory(name="nanoxpu")
+                self.shm = SharedMemory(name=shared_memory_name(config.instance_id, config.engine_generation))
                 self.loop()
 
     def exit(self):
