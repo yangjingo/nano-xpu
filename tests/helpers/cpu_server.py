@@ -1,7 +1,7 @@
 """Start an explicitly test-only HTTP server for CPU smoke verification."""
 from nanoxpu.cli import parse_config
 from nanoxpu.server.app import create_app
-from tests.support import TestEngine
+from tests.helpers.support import TestEngine
 from nanoxpu.server.runtime import ManagedServer
 
 
