@@ -49,11 +49,11 @@ python3.12 -m venv .venv-server
 source .venv-server/bin/activate
 python -m pip install -r ci/requirements.txt -r tests/requirements-cpu.txt
 python -m ruff check .
-python -m compileall -q nanovllm tests ci
+python -m compileall -q nanoxpu tests ci
 python -m unittest discover -s ci -p 'test_*.py' -v
 python -m build --wheel --no-isolation
 python -m pip install --no-deps dist/*.whl
-(cd /tmp && nano-xpu serve --help && python -m nanovllm serve --help)
+(cd /tmp && nano-xpu serve --help && python -m nanoxpu serve --help)
 mkdir -p artifacts
 python -m pytest -q tests --strict-markers --junitxml=artifacts/cpu-tests.xml --basetemp=artifacts/pytest
 python ci/check_junit.py artifacts/cpu-tests.xml

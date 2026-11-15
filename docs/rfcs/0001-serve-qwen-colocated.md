@@ -15,7 +15,7 @@
 
 ### Issue 工作清单
 
-- [x] 增加 CLI 入口与 server 可选依赖，保留 `from nanovllm import LLM` 的现有用法。
+- [x] 增加 CLI 入口与 server 可选依赖，保留 `from nanoxpu import LLM` 的现有用法。
 - [x] 支持模型路径、模型服务名、HTTP 地址、推理参数及 NCCL rendezvous 端口配置。
 - [x] 实现单引擎独占执行、就绪状态与正常/异常退出。
 - [x] 实现 `/health`、`/ready`、`/v1/models`、非流式 `/v1/chat/completions`。
@@ -54,11 +54,11 @@ CUDA_VISIBLE_DEVICES=0,1 nano-xpu serve /models/Qwen3-8B \
 | 已核查事实 | 代码证据 | 对 server 的影响 |
 |---|---|---|
 | 未配置命令行入口，依赖中没有 HTTP server | [`pyproject.toml`](../../pyproject.toml) | 当前没有 `nano-xpu serve` 命令 |
-| `LLM` 直接继承 `LLMEngine`，`generate()` 同步执行至结束 | [`llm.py`](../../nanovllm/llm.py)、[`LLMEngine.generate`](../../nanovllm/engine/llm_engine.py) | 不能直接阻塞 HTTP 事件循环，也不能让多个请求并发修改引擎 |
-| 同一 Scheduler/ModelRunner 完成 P+D，KV 在实例内部保存 | [`LLMEngine.step`](../../nanovllm/engine/llm_engine.py)、[`ModelRunner.allocate_kv_cache`](../../nanovllm/engine/model_runner.py) | 可以复用合部计算路径，不需要新增 KV 传输 |
-| NCCL 总会初始化，地址固定 `localhost:2333`，TP 共享内存名固定 `nanovllm` | [`ModelRunner.__init__`](../../nanovllm/engine/model_runner.py) | TP=1 也有端口冲突；后续 TP 多实例还需隔离共享内存 |
-| 当前采样禁止 temperature=0 | [`SamplingParams.__post_init__`](../../nanovllm/sampling_params.py) | 首版显式拒绝零温度，不声称支持 Greedy |
-| 模型初始化与 Attention 硬绑定 CUDA、NCCL、flash-attn | [`model_runner.py`](../../nanovllm/engine/model_runner.py)、[`attention.py`](../../nanovllm/layers/attention.py) | 首版仅声明 CUDA 支持 |
+| `LLM` 直接继承 `LLMEngine`，`generate()` 同步执行至结束 | [`llm.py`](../../nanoxpu/llm.py)、[`LLMEngine.generate`](../../nanoxpu/engine/llm_engine.py) | 不能直接阻塞 HTTP 事件循环，也不能让多个请求并发修改引擎 |
+| 同一 Scheduler/ModelRunner 完成 P+D，KV 在实例内部保存 | [`LLMEngine.step`](../../nanoxpu/engine/llm_engine.py)、[`ModelRunner.allocate_kv_cache`](../../nanoxpu/engine/model_runner.py) | 可以复用合部计算路径，不需要新增 KV 传输 |
+| NCCL 总会初始化，地址固定 `localhost:2333`，TP 共享内存名固定 `nanoxpu` | [`ModelRunner.__init__`](../../nanoxpu/engine/model_runner.py) | TP=1 也有端口冲突；后续 TP 多实例还需隔离共享内存 |
+| 当前采样禁止 temperature=0 | [`SamplingParams.__post_init__`](../../nanoxpu/sampling_params.py) | 首版显式拒绝零温度，不声称支持 Greedy |
+| 模型初始化与 Attention 硬绑定 CUDA、NCCL、flash-attn | [`model_runner.py`](../../nanoxpu/engine/model_runner.py)、[`attention.py`](../../nanoxpu/layers/attention.py) | 首版仅声明 CUDA 支持 |
 
 现有 `generate()` 会在一次调用中提交整个输入列表，执行结束才返回。首版每次只提交一个请求，通过 HTTP 提供可用的合部服务；动态跨请求批处理另行实现。
 
@@ -100,7 +100,7 @@ CUDA_VISIBLE_DEVICES=0 nano-xpu serve /models/Qwen3-0.6B \
 
 以 `CUDA_VISIBLE_DEVICES` 选择设备，程序内部继续使用逻辑 rank=0。首版不额外增加可能与该环境变量冲突的 `--device`。模型 dtype 沿用配置并记录，不能把未适配 dtype 自动当作已支持。
 
-已实施包改动（CPU 验证）：为现有 `nano-vllm` distribution 增加 `[project.scripts]` 的 `nano-xpu = "nanovllm.cli:main"`，不在本 Issue 中重命名 distribution。`nanovllm.cli` 延迟导入推理与服务模块，`--help` 不加载模型；缺少 server extra 时给出明确安装提示。
+已实施包改动（CPU 验证）：为现有 `nano-vllm` distribution 增加 `[project.scripts]` 的 `nano-xpu = "nanoxpu.cli:main"`，不在本 Issue 中重命名 distribution。`nanoxpu.cli` 延迟导入推理与服务模块，`--help` 不加载模型；缺少 server extra 时给出明确安装提示。
 
 ## 5. 进程、调用与资源所有权
 
@@ -126,10 +126,10 @@ HTTP chat → 校验 schema → 尝试获取唯一生成槽位
 
 | 模块 | 职责与调用时机 |
 |---|---|
-| `nanovllm/cli.py`（新增，CPU 已验证） | 解析 `serve` 参数，构造 ServerConfig/引擎 Config，启动单 HTTP worker |
-| `nanovllm/server/app.py`（新增，CPU 已验证） | lifespan、路由、schema 校验、错误映射、唯一生成槽位；禁止调用进程全局 `generate()` |
-| `nanovllm/server/engine.py`（新增，CPU 已验证） | 持有单线程执行器；`start()` 创建引擎，`complete(request)` 执行完整生成，`close()` 在同线程释放引擎 |
-| `nanovllm/config.py` / `engine/model_runner.py` | 引入并消费 `distributed_port`，保持离线默认 2333 |
+| `nanoxpu/cli.py`（新增，CPU 已验证） | 解析 `serve` 参数，构造 ServerConfig/引擎 Config，启动单 HTTP worker |
+| `nanoxpu/server/app.py`（新增，CPU 已验证） | lifespan、路由、schema 校验、错误映射、唯一生成槽位；禁止调用进程全局 `generate()` |
+| `nanoxpu/server/engine.py`（新增，CPU 已验证） | 持有单线程执行器；`start()` 创建引擎，`complete(request)` 执行完整生成，`close()` 在同线程释放引擎 |
+| `nanoxpu/config.py` / `engine/model_runner.py` | 引入并消费 `distributed_port`，保持离线默认 2333 |
 | `engine/llm_engine.py` | 为显式关闭补幂等保护，使正常 shutdown 与已有 atexit 不重复释放 |
 | `pyproject.toml` | CLI 入口、server extra；已有离线导入路径保持兼容 |
 
@@ -228,7 +228,7 @@ bash docs/rfcs/examples/request-qwen.sh
 | CPU-07 | 子进程真实监听 localhost，调用示例可用；正常停止后可同端口重启 | 通过；见下方测试报告 |
 | CPU-08 | 原 Scheduler 在 CPU 下分块推进；仅验证调度状态，不验证 Attention 或数值 | 通过；见下方测试报告 |
 
-2026-11-13，在 Windows + CPython 3.12.13 的独立依赖目录中执行：**43 passed in 6.39s**，无 CUDA 推理依赖。证据：[JUnit XML](cpu-test-results.xml)、[验证说明](README-cpu.md)、[结果报告](cpu-validation.md)。其中 CPU-07 使用真实 HTTP 子进程，测试了同端口重启；watchdog 的强制非零退出另有子进程测试。Windows `nano-xpu.exe` 被系统 Application Control 拦截，已验证安装入口元数据及 `python -m nanovllm` 的等价 CLI 路径，不把 launcher 标为通过。以下 TC-01–08 保留真实 CUDA 验收，不用 CPU 结果替代。
+2026-11-13，在 Windows + CPython 3.12.13 的独立依赖目录中执行：**43 passed in 6.39s**，无 CUDA 推理依赖。证据：[JUnit XML](cpu-test-results.xml)、[验证说明](README-cpu.md)、[结果报告](cpu-validation.md)。其中 CPU-07 使用真实 HTTP 子进程，测试了同端口重启；watchdog 的强制非零退出另有子进程测试。Windows `nano-xpu.exe` 被系统 Application Control 拦截，已验证安装入口元数据及 `python -m nanoxpu` 的等价 CLI 路径，不把 launcher 标为通过。以下 TC-01–08 保留真实 CUDA 验收，不用 CPU 结果替代。
 
 | 步骤 | 产物 | 依赖与完成条件 |
 |---|---|---|

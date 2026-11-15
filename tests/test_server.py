@@ -13,9 +13,9 @@ import time
 import httpx
 import pytest
 
-from nanovllm.cli import parse_config
-from nanovllm.server.app import create_app
-from nanovllm.server.config import ServerConfig
+from nanoxpu.cli import parse_config
+from nanoxpu.server.app import create_app
+from nanoxpu.server.config import ServerConfig
 from tests.support import TestEngine
 
 
@@ -34,15 +34,15 @@ async def client_for(tmp_path, engine=None):
 
 
 def test_imports_and_help_do_not_load_cuda():
-    result = subprocess.run([sys.executable, "-c", "import nanovllm, nanovllm.server.app, sys; assert not any(x in sys.modules for x in ('torch', 'transformers', 'triton', 'flash_attn')); from nanovllm.cli import main; main(['serve', '--help'])"], capture_output=True, text=True)
+    result = subprocess.run([sys.executable, "-c", "import nanoxpu, nanoxpu.server.app, sys; assert not any(x in sys.modules for x in ('torch', 'transformers', 'triton', 'flash_attn')); from nanoxpu.cli import main; main(['serve', '--help'])"], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     assert "--tensor-parallel-size" in result.stdout
     assert "--max-num-batched-tokens" in result.stdout
 
 
 def test_console_entry_point():
-    entry = next(ep for ep in importlib.metadata.distribution("nano-vllm").entry_points if ep.name == "nano-xpu")
-    assert entry.value == "nanovllm.cli:main"
+    entry = next(ep for ep in importlib.metadata.distribution("nano-xpu").entry_points if ep.name == "nano-xpu")
+    assert entry.value == "nanoxpu.cli:main"
     assert entry.load().__name__ == "main"
 
 
@@ -248,9 +248,9 @@ def test_real_http_subprocess_and_same_port_restart(tmp_path):
 def test_shutdown_watchdog_bounds_stuck_process():
     source = """
 import time
-from nanovllm.server.app import create_app
-from nanovllm.server.config import ServerConfig
-from nanovllm.server.runtime import ManagedServer
+from nanoxpu.server.app import create_app
+from nanoxpu.server.config import ServerConfig
+from nanoxpu.server.runtime import ManagedServer
 from tests.support import TestEngine
 config = ServerConfig('.')
 server = ManagedServer(create_app(config, TestEngine), config, shutdown_timeout=0.1)

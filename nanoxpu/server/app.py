@@ -9,8 +9,8 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from nanovllm.server.engine import InvalidRequest
-from nanovllm.server.schema import ChatRequest
+from nanoxpu.server.engine import InvalidRequest
+from nanoxpu.server.schema import ChatRequest
 
 logger = logging.getLogger(__name__)
 

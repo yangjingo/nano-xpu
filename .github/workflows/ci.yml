@@ -35,7 +35,7 @@ jobs:
       - name: Check Python errors
         run: |
           python -m ruff check .
-          python -m compileall -q nanovllm tests ci
+          python -m compileall -q nanoxpu tests ci
           python -m unittest discover -s ci -p 'test_*.py' -v
       - name: Check workflow syntax
         env:
@@ -76,7 +76,7 @@ jobs:
         run: |
           python -c "import importlib.util; assert all(importlib.util.find_spec(name) is None for name in ('torch', 'transformers', 'triton', 'flash_attn'))"
           nano-xpu serve --help
-          python -m nanovllm serve --help
+          python -m nanoxpu serve --help
       - name: Run all CPU tests
         run: python -m pytest -q tests --strict-markers --junitxml=artifacts/cpu-tests.xml --basetemp=artifacts/pytest
       - name: Reject empty or skipped CPU results

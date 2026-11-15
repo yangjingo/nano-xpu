@@ -1,9 +1,9 @@
 """Exercise the original scheduler without importing transformer/CUDA code."""
 from types import SimpleNamespace
 
-from nanovllm.engine.scheduler import Scheduler
-from nanovllm.engine.sequence import Sequence
-from nanovllm.sampling_params import SamplingParams
+from nanoxpu.engine.scheduler import Scheduler
+from nanoxpu.engine.sequence import Sequence
+from nanoxpu.sampling_params import SamplingParams
 
 
 def test_chunked_prefill_and_block_release():
