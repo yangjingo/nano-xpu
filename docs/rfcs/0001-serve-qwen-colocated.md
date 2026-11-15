@@ -1,17 +1,20 @@
 # RFC-0001：nano-xpu serve 服务化与切分支持——先完成本地 CPU 验证
 
-> 入口更新：本文保留早期服务设计记录。当前配置启动和 CPU 示例以[部署说明](../deployment.md)及其链接为准；旧直接模型命令已停止支持。
+- 方案状态：草案；本 RFC 未登记正式接受记录，实施授权不等于设备验收或方案审批。
+- 实施状态：S0 服务层已实现；当前分支补充实例隔离、子进程回收和部署相关接口。真实 P/D 扩展见 RFC-0002。
+- 验证状态：S0 的 43 项历史测试通过；当前扩展的验证结果统一见 [CPU 部署验证记录](../testing.md)。CUDA/Qwen/TP 尚未验收。
+- 作者 / 维护人：初稿署名未记录；本次由 Codex 按用户要求修订；维护人待确认。
+- 创建 / 更新日期：2026-11-13（原稿日期）/ 2026-11-15。
+- 历史问题基线：`yangjingo/nano-xpu@40a001f99181321d8b2ab30a0b8a1cfcdba0c9d5`。
+- 当前核查版本：`2d61a9c8aa6eaf7eb6a928b1331f67418b5bd79b` + `feat/rfc-cpu-deployment` 工作区改动（未提交）；本文据实际源码回填，不将其视为 main 已发布能力。
+- 关联：[总体 roadmap](../roadmap.md)、[CUDA 耦合审计](../cuda-coupling-audit.md)、[RFC-0002](0002-router-oneclick-pd.md)。独立 RFC Issue 未登记。
+- 反馈对象与待决问题：仓库维护者（具体人选待确认）；真实 CUDA 生命周期、Qwen 数值对照与 TP=2 Gate 仍需设备证据。
 
-- 状态：方案草案；S0（CPU 服务层）已实现，43 项测试通过；CUDA/TP/真实 Qwen 结果待设备验收。
-- 日期：2026-11-13
-- 代码证据基线：`40a001f99181321d8b2ab30a0b8a1cfcdba0c9d5`
-- 关联：[总体 roadmap](../roadmap.md)、[CUDA 耦合审计](../cuda-coupling-audit.md)
-
-## 1. 建议的首个 Issue
+## 1. 摘要与交付边界
 
 **标题：`feat: 建立 nano-xpu serve 服务入口与切分参数，先完成 CPU 服务链路验证`**
 
-当前只有 `LLM.generate()` 离线调用，无法通过 server 接收请求。增加 `nano-xpu serve <model-path>`，加载本地 Qwen3 模型，提供非流式文本聊天、健康检查和模型查询接口，并给出可复现的启动与调用脚本。
+在历史问题基线中只有 `LLM.generate()` 离线调用。S0 曾增加 `nano-xpu serve <model-path>`；当前按 RFC-0002 统一为配置启动，复用 CPU 验证过的 HTTP 服务层；本 RFC 的完整目标仍是加载真实 Qwen3，提供非流式文本聊天、健康检查和模型查询，并完成可复现的设备启动、调用与退出验证。
 
 本 Issue 的“混合部署”明确为 **Prefill 与 Decode 在同一个引擎实例中合部执行**。先交付 S0：本机 CPU 验证服务层；真实推理的第一条交付路径是 Linux + NVIDIA CUDA + Qwen3-0.6B + TP=1。多副本共存、Ascend 与跨厂商协同分别在后续阶段推进，不能由这项验收推导出已支持异构混部。
 
@@ -22,14 +25,15 @@
 - [x] 实现单引擎独占执行、就绪状态与正常/异常退出。
 - [x] 实现 `/health`、`/ready`、`/v1/models`、非流式 `/v1/chat/completions`。
 - [x] 实现输入与显存块容量校验、并发忙碌拒绝和结构化错误（CPU/适配器桩验证，真实 KV 分配待设备验证）。
-- [ ] 将本 RFC 示例升级为实测脚本，补齐启动、调用、退出证据。
+- [x] 提供 CPU 启动与调用脚本，验证真实 HTTP 进程和同端口重启。
+- [ ] 在 CUDA 环境执行真实 Qwen 脚本，补齐模型启动、调用、退出证据。
 - [ ] 验证原 `example.py` 与离线 API 无回归，回填第 8 节验收表。
 
-完成定义：在固定环境中，安装后使用一条 `nano-xpu serve` 命令加载 Qwen3-0.6B；ready 后 HTTP 请求返回模型实际生成的文本；SIGTERM 后释放 GPU 与通信资源，可以重新启动。所有验收项有证据后关闭 Issue。
+完成定义：在固定环境中，安装后使用 `nano-xpu serve -f cluster.yaml` 经 router 提供 Qwen3-0.6B；ready 后 HTTP 请求返回模型实际生成的文本；SIGTERM 后释放 GPU 与通信资源，可以重新启动。所有验收项有证据后关闭 Issue。
 
-### 当前实施边界：S0 本地 CPU 验证
+### 本 RFC 的 S0 实施边界：本地 CPU 验证
 
-本轮授权实施 CLI、HTTP server、独占执行线程、可注入引擎边界和 CPU 测试。默认生产入口仍指向 CUDA nano-xpu 引擎；测试引擎仅保存在 `tests/`，不增加 `--backend mock`，无 CUDA 时禁止自动返回模拟文本。CPU 验证不需要下载 Qwen 权重，也不能证明 Qwen 推理、KV 算子或 TP 通信正确。
+S0 实施 CLI、HTTP server、独占执行线程、可注入引擎边界和 CPU 测试。默认生产入口仍指向 CUDA nano-xpu 引擎；测试引擎仅保存在 `tests/`，不增加 `--backend mock`，无 CUDA 时禁止自动返回模拟文本。CPU 验证不需要下载 Qwen 权重，也不能证明 Qwen 推理、KV 算子或 TP 通信正确。
 
 S0 完成定义：Python 3.12 环境中运行 CLI 帮助与参数校验；通过测试引擎启动真实 HTTP 服务并验证四个路由、并发拒绝、断连后的槽位所有权、故障变为不可用、关闭与重启；所有 CPU 测试通过并记录证据。完整 Issue 仍需 S1 的真实 Qwen 验收。
 
@@ -39,26 +43,27 @@ S0 完成定义：Python 3.12 环境中运行 CLI 帮助与参数校验；通过
 |---|---|---|---|
 | Tensor Parallelism（TP） | 按模型层内张量维度切到多张 GPU；`--tensor-parallel-size 1..8` | 校验范围并确认参数传递，不能证明多卡计算正确 | S1 验证 TP=1 和 TP=2；同时检查注意力头等维度能被 TP 整除 |
 | chunked prefill | 调度器按 `--max-num-batched-tokens` 分块处理长 prompt，KV 留在同一实例 | 校验正整数、参数传递；可单独测试原 Scheduler 的分块状态 | S1 对照分块与不分块的真实 Qwen 输出、边界和显存 |
-| P/D 分离 | Prefill 与 Decode 放到独立实例，需传 KV 与请求状态 | 不实现；无 `--pd` 开关 | S5 单独设计并验收 KVConnector |
+| P/D 分离 | Prefill 与 Decode 放到独立实例，需传 KV 与请求状态 | S0 不实现；后续角色与 CPU 阶段控制见 RFC-0002 | 真实后端与设备验收见 RFC-0002 的 T2-10、T2-17/18 |
 
 新增 `--max-num-seqs` 控制引擎调度序列上限；它不改变首版 HTTP 单活动请求策略。TP 不能等同于流水线并行（PP）；本 RFC 不添加 PP 或同卡多模型共享显存能力。
 
 目标多卡示例（待 GPU 验收）：
 
 ```bash
-CUDA_VISIBLE_DEVICES=0,1 nano-xpu serve /models/Qwen3-8B \
-  --tensor-parallel-size 2 --max-model-len 8192 \
-  --max-num-batched-tokens 2048 --max-num-seqs 32
+# 在 cluster.yaml 中设置该 worker 的 gpus: [0, 1]，profile 配置模型和 engine 参数。
+nano-xpu serve -f cluster.yaml
 ```
 
-## 2. 基线行为与问题
+## 2. 历史基线行为与问题
+
+下表描述 `40a001f99181321d8b2ab30a0b8a1cfcdba0c9d5` 的历史问题；路径链接用于定位当前模块，不能据此将旧行为当作当前实现。当前差异见第 5.3 节。
 
 | 已核查事实 | 代码证据 | 对 server 的影响 |
 |---|---|---|
-| 未配置命令行入口，依赖中没有 HTTP server | [`pyproject.toml`](../../pyproject.toml) | 当前没有 `nano-xpu serve` 命令 |
+| 基线未配置命令行入口，依赖中没有 HTTP server | [`pyproject.toml`](../../pyproject.toml) | 当时没有 `nano-xpu serve` 命令 |
 | `LLM` 直接继承 `LLMEngine`，`generate()` 同步执行至结束 | [`llm.py`](../../nanoxpu/llm.py)、[`LLMEngine.generate`](../../nanoxpu/engine/llm_engine.py) | 不能直接阻塞 HTTP 事件循环，也不能让多个请求并发修改引擎 |
 | 同一 Scheduler/ModelRunner 完成 P+D，KV 在实例内部保存 | [`LLMEngine.step`](../../nanoxpu/engine/llm_engine.py)、[`ModelRunner.allocate_kv_cache`](../../nanoxpu/engine/model_runner.py) | 可以复用合部计算路径，不需要新增 KV 传输 |
-| NCCL 总会初始化，地址固定 `localhost:2333`，TP 共享内存名固定 `nanoxpu` | [`ModelRunner.__init__`](../../nanoxpu/engine/model_runner.py) | TP=1 也有端口冲突；后续 TP 多实例还需隔离共享内存 |
+| 基线 NCCL 地址固定 `localhost:2333`，TP 共享内存名固定 `nanoxpu` | [`ModelRunner.__init__`](../../nanoxpu/engine/model_runner.py) | 需配置端口并按实例隔离；当前已有 CPU 层实现，仍待设备验证 |
 | 当前采样禁止 temperature=0 | [`SamplingParams.__post_init__`](../../nanoxpu/sampling_params.py) | 首版显式拒绝零温度，不声称支持 Greedy |
 | 模型初始化与 Attention 硬绑定 CUDA、NCCL、flash-attn | [`model_runner.py`](../../nanoxpu/engine/model_runner.py)、[`attention.py`](../../nanoxpu/layers/attention.py) | 首版仅声明 CUDA 支持 |
 
@@ -70,22 +75,19 @@ CUDA_VISIBLE_DEVICES=0,1 nano-xpu serve /models/Qwen3-8B \
 
 首版提供 OpenAI 风格的有限聊天接口，仅支持文本 `system/user/assistant` 消息、单个候选 `n=1` 和 `stream=false`。不承诺完整 OpenAI SDK 兼容性。暂不提供 SSE、工具调用、多模态、鉴权、多模型路由、跨请求 continuous batching、P/D 分离或同卡资源共享调度。
 
-选择这一路径是为了先验证 CLI → HTTP → 真实模型 → HTTP 响应的完整链路。相较于在事件循环里直接调用 `generate()`，专属执行线程可以让健康检查继续工作；相较于首版就实现服务进程池，它减少了 IPC、调度及资源恢复状态。HTTP 层使用 FastAPI/Uvicorn，作为 `server` extra；版本需在实现时固定并验证，现有 CUDA 核心依赖保持原状。
+以上是 S0 合部服务范围。当前分支按 RFC-0002 增加角色内部鉴权、部署身份与 CPU 阶段接口；这不等于提供公网访问控制或已完成真实 P/D 后端，两份 RFC 分别记录各自验收。
+
+选择这一路径是为了先验证 CLI → HTTP → 真实模型 → HTTP 响应的完整链路。相较于在事件循环里直接调用 `generate()`，专属执行线程可以让健康检查继续工作；相较于首版就实现服务进程池，它减少了 IPC、调度及资源恢复状态。FastAPI/Uvicorn 已作为 `server` extra 固定版本，见 `pyproject.toml`；现有 CUDA 核心依赖保持原状。
 
 ## 4. 目标启动接口
 
 以下为真实模型目标命令；S0 不把它标记为已完成设备验收：
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 nano-xpu serve /models/Qwen3-0.6B \
-  --served-model-name qwen3-0.6b \
-  --host 127.0.0.1 --port 8000 \
-  --tensor-parallel-size 1 \
-  --distributed-port 2333 \
-  --max-model-len 4096 \
-  --gpu-memory-utilization 0.9 \
-  --enforce-eager
+nano-xpu serve -f ./cluster-colocated.yaml
 ```
+
+模型、服务名和引擎参数写入 profile；卡号、角色与端口写入 topology。完整配置说明见 [RFC-0002](0002-router-oneclick-pd.md)。下面保留内部 `_worker` 参数约定，供编排器生成命令；用户不直接传这些参数给 serve。
 
 | 参数 | 约定与校验 |
 |---|---|
@@ -100,14 +102,14 @@ CUDA_VISIBLE_DEVICES=0 nano-xpu serve /models/Qwen3-0.6B \
 | `--gpu-memory-utilization` | 默认 0.9，必须在 `(0, 1)`；它是本实例预算，不是多实例隔离保证 |
 | `--enforce-eager` | 显式关闭 CUDA Graph；首次验收使用此参数，默认仍沿用引擎行为 |
 
-以 `CUDA_VISIBLE_DEVICES` 选择设备，程序内部继续使用逻辑 rank=0。首版不额外增加可能与该环境变量冲突的 `--device`。模型 dtype 沿用配置并记录，不能把未适配 dtype 自动当作已支持。
+planner 根据 YAML 的 `gpus` 生成 `CUDA_VISIBLE_DEVICES` 选择设备，程序内部继续使用逻辑 rank=0。首版不额外增加可能与该环境变量冲突的 `--device`。模型 dtype 沿用配置并记录，不能把未适配 dtype 自动当作已支持。
 
 已实施包改动（CPU 验证）：为现有 `nano-vllm` distribution 增加 `[project.scripts]` 的 `nano-xpu = "nanoxpu.cli:main"`，不在本 Issue 中重命名 distribution。`nanoxpu.cli` 延迟导入推理与服务模块，`--help` 不加载模型；缺少 server extra 时给出明确安装提示。
 
 ## 5. 进程、调用与资源所有权
 
 ```text
-CLI: 校验启动参数 → 启动 HTTP app（仅一个 web worker，不使用 reload）
+内部 worker: 校验启动参数 → 启动 HTTP app（仅一个 web worker，不使用 reload）
                               │ startup
                               ▼
                     专属 engine 执行线程
@@ -128,9 +130,10 @@ HTTP chat → 校验 schema → 尝试获取唯一生成槽位
 
 | 模块 | 职责与调用时机 |
 |---|---|
-| `nanoxpu/cli.py`（新增，CPU 已验证） | 解析 `serve` 参数，构造 ServerConfig/引擎 Config，启动单 HTTP worker |
-| `nanoxpu/server/app.py`（新增，CPU 已验证） | lifespan、路由、schema 校验、错误映射、唯一生成槽位；禁止调用进程全局 `generate()` |
-| `nanoxpu/server/engine.py`（新增，CPU 已验证） | 持有单线程执行器；`start()` 创建引擎，`complete(request)` 执行完整生成，`close()` 在同线程释放引擎 |
+| `nanoxpu/cli.py` / `deployment/cli.py` | 公开配置入口，调用 Controller 管理整组服务 |
+| `nanoxpu/server/cli.py` | 内部 `_worker` 参数解析与单 HTTP worker 启动；模型/资源逻辑不因入口合并改变 |
+| `nanoxpu/server/app.py::EngineService`（已有，CPU 已验证） | 持有单线程 executor、唯一生成槽位和服务状态；`run()` 将 start/complete/close 与可选 tick 提交到同一引擎线程；`create_app()` 定义 lifespan 和路由 |
+| `nanoxpu/server/engine.py::NanoEngine`（已有，CPU 适配器边界已验证） | 同步 `start()` 创建 CUDA 引擎，`complete(request)` 执行生成，`close()` 释放引擎；线程归属由 EngineService 保证 |
 | `nanoxpu/config.py` / `engine/model_runner.py` | 引入并消费 `distributed_port`，保持离线默认 2333 |
 | `engine/llm_engine.py` | 为显式关闭补幂等保护，使正常 shutdown 与已有 atexit 不重复释放 |
 | `pyproject.toml` | CLI 入口、server extra；已有离线导入路径保持兼容 |
@@ -141,9 +144,11 @@ HTTP chat → 校验 schema → 尝试获取唯一生成槽位
 
 除检查 `prompt_tokens + max_tokens <= max_model_len` 外，还须按当前 `block_size` 检查最坏情况下所需 KV blocks 不超过本实例总 blocks；不得把永远无法分配的请求留给 Scheduler 触发断言。成功后该请求的活动序列与引用被释放；允许已释放 block 上的 prefix cache 数据留存，不能将缓存保留误判为活动资源泄漏。
 
-关键调度伪代码：
+以下为 `create_app()` 内聊天 handler 的语义伪码，辅助函数名不是新增公开接口：
 
 ```python
+# nanoxpu/server/app.py::create_app() 内部 chat handler
+
 async def chat(request):
     validate_supported_fields(request)
     if not ready:
@@ -163,8 +168,17 @@ async def chat(request):
 - schema、模型名、长度或容量错误：在生成前拒绝，不修改 Scheduler 状态，下一请求可继续。
 - 请求断连：首版继续完成已开始的生成并丢弃返回值，完成后才释放槽位；不宣称立即取消 GPU 运算。首版不提供执行中的硬超时。
 - 模型执行异常（含 OOM）：将引擎标记 unhealthy/ready=false，当前请求返回 500，后续生成返回 503；触发受控关闭并以非零码退出，由外部重新拉起，不在可能污染的 Scheduler 上继续生成。
-- SIGTERM/SIGINT：ready=false，拒绝新生成，最多等待活动任务 30 秒，随后在所属线程关闭引擎。超时则由 CLI 的退出 watchdog 记录异常并强制非零退出，避免 executor 等待卡住的 GPU 线程而永远无法结束；强制退出依赖 OS 回收进程资源，不能声称仍执行了 Python 清理。S0 的测试引擎不创建 TP 子进程；TP>1 的强制退出与子进程资源回收尚待 S1 实现和设备验证。
+- SIGTERM/SIGINT：ready=false，拒绝新生成，正常退出等待活动任务并在所属线程关闭引擎。30 秒 watchdog 到期后先尝试有界回收所持有的 TP 子进程，再强制非零退出；清理阶段可能增加少量时间，30 秒不是所有进程退出的硬上限。当前 `WorkerProcesses` 与 watchdog 已用真实 CPU 子进程验证；CUDA/NCCL/显存释放仍待 S1 设备验收。
 - `close()` 幂等；正常退出显式销毁通信组并释放模型引用。TP 子进程退出/超时机制在 S1 的 TP=2 Gate 验证，未通过前不能声明多卡服务已交付。
+
+### 5.3 设计与实现差异
+
+| 原描述 / 要求 | 当前实现与证据 | 处理与剩余验收 |
+|---|---|---|
+| engine.py 持有线程执行器 | executor 实际属于 `app.py::EngineService`，NanoEngine 是同步适配器 | 已修正文档归属；专属线程正确性有 CPU 回归 |
+| 固定共享内存名；TP 退出机制尚待实现 | `engine/identity.py::shared_memory_name` 与 `process_lifecycle.py::WorkerProcesses` 已接入 ModelRunner、LLMEngine 和 watchdog | CPU 隔离/子进程回收已有测试；TP/NCCL 与 GPU 回收仍待设备 |
+| 异常堆栈写日志 | 生成/维护失败只写脱敏摘要，避免包含内部 token/KV 元数据 | 采用当前日志约束，不要求输出原始敏感异常 |
+| Python `>=3.10,<3.13` | 新文件哈希路径误用了 Python 3.11 才有的 `hashlib.file_digest`，已在移除此 API 的环境模拟中复现两处失败 | 使用有界分块 SHA256 保留 3.10 兼容范围；修复后的回归结果见统一验证记录，不代表完整 3.10 环境已验收 |
 
 ## 6. HTTP 契约
 
@@ -191,29 +205,29 @@ async def chat(request):
 
 成功响应包含 `id`、`object="chat.completion"`、`created`（Unix 秒）、`model`、`choices[0].message={role:"assistant",content:...}`、`choices[0].index=0`、`finish_reason` 和 `usage`。usage 使用实际模板输入 token 数和实际生成 token 数，total 为二者之和，不用字符数估算；遇 EOS 为 `stop`，到 max_tokens 为 `length`，同时满足时优先 `stop`。
 
-错误统一为 `{"error":{"message":"...","type":"...","code":"..."}}`。非法参数返回 400，模型名不匹配返回 404，忙碌返回 429（附 `Retry-After: 1`），尚未就绪返回 503，推理失败返回 500。内部堆栈写日志，不放入响应。
+错误统一为 `{"error":{"message":"...","type":"...","code":"..."}}`。非法参数返回 400，模型名不匹配返回 404，忙碌返回 429（附 `Retry-After: 1`），尚未就绪返回 503，推理失败返回 500。生成/维护故障记录脱敏摘要，不将任意异常堆栈、内部凭据或 KV 元数据写入普通响应和日志。
 
 ## 7. 示例脚本与执行方式
 
-本目录附两份接口示例；调用脚本已对 CPU 测试服务执行，真实模型启动脚本仍待 CUDA 设备验收：
+仓库 `examples/server.md` 汇总服务示例，脚本嵌入文档代码块；先按说明保存 `.sh` 文件和部署 YAML，再执行下方命令。调用脚本已对 CPU 测试服务执行，真实模型启动脚本仍待 CUDA 设备验收：
 
-- [`examples/serve-qwen.sh`](examples/serve-qwen.sh)：前台启动，用 `exec` 保持终止信号直达服务进程。
-- [`examples/request-qwen.sh`](examples/request-qwen.sh)：有限时间等待 ready，调用真实聊天接口，验证响应结构。
+- [启动示例](../../examples/server.md#qwen-配置启动)：通过 CLUSTER_CONFIG 指定 YAML，用 `exec` 启动 serve Controller；前台 Controller 收到 Ctrl+C 后有序停止 router 和 workers。
+- [请求示例](../../examples/server.md#qwen-请求检查)：有限时间等待 ready，调用真实聊天接口，验证响应结构。
 
 目标环境为 Linux + NVIDIA CUDA；开发机 Windows 上完成文档检查不算设备验收。Python 遵循当前项目 `>=3.10,<3.13` 限制。模型下载、CUDA/PyTorch/flash-attn 配套安装在运行前完成，实测后记录完整版本与 GPU 型号。
 
 ```bash
-# 真实 CUDA 环境的安装与启动方式，尚未设备验收；CPU 测试请看 README-cpu.md。
-python -m pip install -e '.[server]'
+# 真实 CUDA 环境的安装与启动方式，尚未设备验收；CPU 测试请看 docs/testing.md。
+python -m pip install -e '.[server,deploy]'
 
 # 终端 1，位于仓库根目录：
-MODEL_PATH=/models/Qwen3-0.6B bash docs/rfcs/examples/serve-qwen.sh
+CLUSTER_CONFIG=./cluster-colocated.yaml bash ./serve-qwen.sh
 
 # 终端 2：
-bash docs/rfcs/examples/request-qwen.sh
+bash ./request-qwen.sh
 ```
 
-脚本默认仅绑定 loopback。外部访问由使用者显式配置 HOST；首版不包含公网部署所需的访问控制。示例的最大等待时间用于客户端启动探测，不等于推理取消机制。
+入口地址、节点与端口来自拓扑/profile；worker 按内部编排绑定监听地址，公开请求发送到 router。首版不包含公网部署所需的访问控制。示例的最大等待时间用于客户端启动探测，不等于推理取消机制。
 
 ## 8. 实施顺序与验收
 
@@ -230,7 +244,7 @@ bash docs/rfcs/examples/request-qwen.sh
 | CPU-07 | 子进程真实监听 localhost，调用示例可用；正常停止后可同端口重启 | 通过；见下方测试报告 |
 | CPU-08 | 原 Scheduler 在 CPU 下分块推进；仅验证调度状态，不验证 Attention 或数值 | 通过；见下方测试报告 |
 
-2026-11-13，在 Windows + CPython 3.12.13 的独立依赖目录中执行：**43 passed in 6.39s**，无 CUDA 推理依赖。证据：[JUnit XML](cpu-test-results.xml)、[验证说明](README-cpu.md)、[结果报告](cpu-validation.md)。其中 CPU-07 使用真实 HTTP 子进程，测试了同端口重启；watchdog 的强制非零退出另有子进程测试。Windows `nano-xpu.exe` 被系统 Application Control 拦截，已验证安装入口元数据及 `python -m nanoxpu` 的等价 CLI 路径，不把 launcher 标为通过。以下 TC-01–08 保留真实 CUDA 验收，不用 CPU 结果替代。
+2026-11-13，在 Windows + CPython 3.12.13 的独立依赖目录中执行：**43 passed in 6.39s**，无 CUDA 推理依赖。历史结果、原始报告位置和复现方法见 [CPU 验证指南与结果](../testing.md)。其中 CPU-07 使用真实 HTTP 子进程，测试了同端口重启；watchdog 的强制非零退出另有子进程测试。Windows `nano-xpu.exe` 被系统 Application Control 拦截，已验证安装入口元数据及 `python -m nanoxpu` 的等价 CLI 路径，不把 launcher 标为通过。以下 TC-01–08 保留真实 CUDA 验收，不用 CPU 结果替代。
 
 | 步骤 | 产物 | 依赖与完成条件 |
 |---|---|---|
@@ -278,3 +292,10 @@ S 阶段描述服务化交付，既有 Phase 描述异构运行时能力，两�
 服务生命周期采用 [FastAPI lifespan](https://fastapi.tiangolo.com/advanced/events/)，CPU 接口测试参考 [FastAPI testing](https://fastapi.tiangolo.com/tutorial/testing/)，请求字段使用 [Pydantic strict mode](https://docs.pydantic.dev/latest/concepts/strict_mode/) 避免把字符串或布尔值隐式转为数值参数。
 
 本 RFC 已回填 CPU 验证结果。本机 Python 3.12 可直接运行；新建虚拟环境的启动器被 Windows Application Control 拒绝，因此本轮使用可运行的 Python 3.12 原解释器与仓库内独立依赖目录，不修改系统策略。
+
+## 12. 评审结论与交付回填
+
+- 方案结论：保留草案，正式接受记录未在本文登记；本次仅核对与修正文档，不代替维护者审批。
+- 实现记录：S0 服务层见 `b734b0b797d58e9b5e470dec420c187709d4f4fd`；基础 CI/模板见 [PR #1](https://github.com/yangjingo/nano-xpu/pull/1)，合入提交 `2d61a9c8aa6eaf7eb6a928b1331f67418b5bd79b`。后续 CPU 扩展仍为当前分支未提交修改。
+- 验收记录：历史 43 项结果保留其日期与版本；新增回归、兼容性修复和当前证据统一链接到 [CPU 部署验证记录](../testing.md)，不将其结果推导为设备通过。
+- 剩余工作：TC-01～TC-08 的真实模型与设备验收、TP=2 专项验证及原离线 API 的真实模型回归；Python 3.10 完整环境未运行。

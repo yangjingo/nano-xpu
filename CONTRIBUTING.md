@@ -7,6 +7,6 @@
 - 接口、架构或重要行为调整先用 [RFC 模板](.github/ISSUE_TEMPLATE/rfc.md) 讨论机制与取舍；定稿保存在 `docs/rfcs/`。方案讨论通过不代表实现或测试已经完成。
 - PR 使用 [PR 模板](.github/pull_request_template.md)，一个 PR 聚焦一个问题，列出实际验证和未完成项；只在完整解决 Issue 时使用 `Closes`。
 
-基础检查按 [CPU CI 指南](docs/ci.md) 执行。新增 CPU 回归测试放进 `tests/`，CI 自动运行整个目录；测试应观察行为，而非重复实现。设备测试需要另行记录模型、设备、版本与输入，不能用 CPU 桩结果代替。
+基础检查按 [CPU CI 指南](docs/ci.md) 执行。一般 CPU 回归测试按 `nanoxpu/` 的模块结构放进 `tests/`，具体映射与共享夹具规则见 [测试指南](tests/README.md)，依赖真实 Linux SSH/router 的集成放进 `tests/integration/`，CI 分别完整运行；测试应观察行为，而非重复实现。设备测试需要另行记录模型、设备、版本与输入，不能用 CPU 桩结果代替。
 
 改动后同步相关文档。工作流的 `ci-gate` 是基础验证结论；是否允许合入仍由仓库规则与评审决定，模板本身不会创建规则、标签或自动指派人员。
