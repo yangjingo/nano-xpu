@@ -2,6 +2,8 @@
 
 本说明对应 [RFC-0001](0001-serve-qwen-colocated.md) 的 S0。测试引擎只在 `tests/` 中提供合成响应，**不会加载 Qwen，不证明真实模型推理或 TP 多卡正确**。
 
+自动化工作流、wheel 安装验证与 CI 验收结果见 [CPU CI 指南](../ci.md)。
+
 ## 标准 Python 3.12 环境
 
 在仓库根目录执行；CPU 环境不安装 CUDA 核心依赖：

@@ -32,3 +32,11 @@ test = ["pytest==9.0.3", "httpx==0.28.1", "numpy", "xxhash"]
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["nanovllm*"]
+
+[tool.ruff]
+target-version = "py312"
+extend-exclude = [".cpu-deps", ".venv-server"]
+
+[tool.ruff.lint]
+# Start with syntax and definite runtime errors; avoid unrelated style churn.
+select = ["E9", "F63", "F7", "F82"]

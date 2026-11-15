@@ -1,0 +1,111 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  static:
+    name: static
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: ci/requirements.txt
+      - run: python -m pip install -r ci/requirements.txt
+      - name: Check Python errors
+        run: |
+          python -m ruff check .
+          python -m compileall -q nanovllm tests ci
+          python -m unittest discover -s ci -p 'test_*.py' -v
+      - name: Check workflow syntax
+        env:
+          ACTIONLINT_VERSION: '1.7.12'
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          curl --fail --location --retry 3 "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" -o "$archive"
+          printf '%s  %s\n' "$ACTIONLINT_SHA256" "$archive" | sha256sum --check
+          tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -color
+
+  cpu:
+    name: cpu (Python 3.12)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            tests/requirements-cpu.txt
+            ci/requirements.txt
+            pyproject.toml
+      - name: Install CPU dependencies and wheel
+        run: |
+          python -m pip install -r ci/requirements.txt -r tests/requirements-cpu.txt
+          python -m build --wheel --no-isolation
+          python -m pip install --no-deps dist/*.whl
+          mkdir -p artifacts
+          python -m pip freeze > artifacts/installed.txt
+      - name: Smoke test the installed package outside the source tree
+        working-directory: ${{ runner.temp }}
+        run: |
+          python -c "import importlib.util; assert all(importlib.util.find_spec(name) is None for name in ('torch', 'transformers', 'triton', 'flash_attn'))"
+          nano-xpu serve --help
+          python -m nanovllm serve --help
+      - name: Run all CPU tests
+        run: python -m pytest -q tests --strict-markers --junitxml=artifacts/cpu-tests.xml --basetemp=artifacts/pytest
+      - name: Reject empty or skipped CPU results
+        if: ${{ always() }}
+        run: python ci/check_junit.py artifacts/cpu-tests.xml
+      - name: Upload CPU evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: cpu-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            artifacts/cpu-tests.xml
+            artifacts/installed.txt
+            artifacts/pytest/**/cpu-server.log
+          if-no-files-found: error
+          retention-days: 7
+
+  # Keep this name stable for branch protection; every required job belongs in needs.
+  ci-gate:
+    name: ci-gate
+    if: ${{ always() }}
+    needs: [static, cpu]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Require every basic check to succeed
+        env:
+          STATIC_RESULT: ${{ needs.static.result }}
+          CPU_RESULT: ${{ needs.cpu.result }}
+        run: |
+          printf 'static=%s cpu=%s\n' "$STATIC_RESULT" "$CPU_RESULT"
+          test "$STATIC_RESULT" = success && test "$CPU_RESULT" = success

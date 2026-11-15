@@ -3,6 +3,7 @@
 .venv-server/
 .playwright-cli/
 output/playwright/
+artifacts/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
