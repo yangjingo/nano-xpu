@@ -152,6 +152,9 @@ def test_unproven_fence_retains_destination_until_positive_completion(tmp_path):
             assert state.d.quarantine and state.d.scheduler.block_manager.used_block_ids
             assert not state.d.model.runs
             ticket = state.d.connector.last_transfer
+            # Permission to fence is not completion of the copy thread. Wait for
+            # its explicit signal before asking the nonblocking tick to reclaim.
+            assert await asyncio.to_thread(ticket.finished.wait, 2)
             ticket.fence_allowed = True
             await state.d_app.state.service.run(state.d.tick)
             assert not state.d.quarantine and not state.d.scheduler.block_manager.used_block_ids
