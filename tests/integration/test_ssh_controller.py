@@ -39,7 +39,9 @@ def ssh_host(tmp_path, example_files):
     # Root is needed only for sshd's normal user authentication/privilege separation.
     privilege = [] if os.geteuid() == 0 else ["sudo", "-n"]
     subprocess.run([*privilege, "mkdir", "-p", "/run/sshd"], check=True, timeout=10)
-    with tempfile.TemporaryDirectory(prefix="nano-xpu-ssh-") as directory:
+    # StrictModes checks ancestors of AuthorizedKeysFile; /tmp is world-writable.
+    # Keep private fixtures beneath the user's home, outside uploaded artifacts.
+    with tempfile.TemporaryDirectory(prefix="nano-xpu-ssh-", dir=Path.home()) as directory:
         root = Path(directory)
         root.chmod(0o700)
         for name in ("host", "client"):
