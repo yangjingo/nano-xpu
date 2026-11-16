@@ -47,16 +47,16 @@ CPU 测试必须收集到用例，且没有失败、错误或跳过。JUnit 校�
 ```bash
 python3.12 -m venv .venv-server
 source .venv-server/bin/activate
-python -m pip install -r ci/requirements.txt -r tests/requirements-cpu.txt
+python -m pip install -r .github/ci/requirements.txt -r tests/requirements-cpu.txt
 python -m ruff check .
-python -m compileall -q nanoxpu tests ci
-python -m unittest discover -s ci -p 'test_*.py' -v
+python -m compileall -q nanoxpu tests .github/ci
+python -m unittest discover -s .github/ci -p 'test_*.py' -v
 python -m build --wheel --no-isolation
 python -m pip install --no-deps dist/*.whl
 (cd /tmp && nano-xpu serve --help && python -m nanoxpu serve --help)
 mkdir -p artifacts
-python -m pytest -q tests --strict-markers --junitxml=artifacts/cpu-tests.xml --basetemp=artifacts/pytest
-python ci/check_junit.py artifacts/cpu-tests.xml
+python -m pytest -q tests --ignore=tests/integration --strict-markers --junitxml=artifacts/cpu-tests.xml --basetemp=artifacts/pytest
+python .github/ci/check_junit.py artifacts/cpu-tests.xml
 ```
 
 工作流语法另用 actionlint 1.7.12 检查，工作流内包含下载与 SHA256 校验命令。本机 Windows 的解释器限制和可用命令见 [CPU 本地验证](rfcs/README-cpu.md)。Ruff 当前只启用语法和确定性错误规则，不强制整仓格式化。新建 job 时必须同步 `ci-gate.needs` 和成功判定，避免遗漏。
@@ -64,3 +64,11 @@ python ci/check_junit.py artifacts/cpu-tests.xml
 本地可审阅的工作流与模板准备完成后，按仓库发布规范校核并推送。在 GitHub 完成一次成功运行后，把 job 名 `ci-gate` 配为 main 的 required status check，并确认来源为 GitHub Actions；YAML 自身不会设置分支保护。Issue 模板进入默认分支后才出现在新建选择页。当前不配置自动合入、远程发布、标签或人员指派。
 
 PR 只取消同一 PR 的旧运行；push/手动运行使用各自 run ID。job 有超时限制。任务使用 GitHub 托管 runner 和只读仓库权限，checkout 不持久化凭据。Actions 固定到完整提交；更改固定版本时重新验证。若以后启用 merge queue，需补充 `merge_group` 事件及其验收；本版没有宣称支持队列合入。
+
+## 真实 router 与 SSH 集成
+
+新增 cpu-integration 在 Ubuntu 构建固定版本 router 并启动独立 sshd，执行 `python -m pytest -q tests/integration --strict-markers`。基础 cpu job 排除该目录，两个范围共同覆盖全部用例；ci-gate 要求 static、cpu、cpu-integration 全为 success。缺少先决环境明确失败，不用 skip 通过。
+
+构建与报告工具集中在 .github/ci，示例从 Markdown 提取到 runner 临时目录。源码外 wheel smoke 检查 nanoxpu 模块/发行元数据以及两种配置计划。保留 JUnit 与脱敏日志，不上传私钥或私有状态。
+
+本地 Windows 仅完成 18 项 Linux 用例收集，实际构建/SSH/router 与完整 workflow 仍待托管 CI；CPU 控制测试不能代替该结果。

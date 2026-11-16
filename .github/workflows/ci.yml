@@ -30,13 +30,13 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: ci/requirements.txt
-      - run: python -m pip install -r ci/requirements.txt
+          cache-dependency-path: .github/ci/requirements.txt
+      - run: python -m pip install -r .github/ci/requirements.txt
       - name: Check Python errors
         run: |
           python -m ruff check .
-          python -m compileall -q nanoxpu tests ci
-          python -m unittest discover -s ci -p 'test_*.py' -v
+          python -m compileall -q nanoxpu tests .github/ci
+          python -m unittest discover -s .github/ci -p 'test_*.py' -v
       - name: Check workflow syntax
         env:
           ACTIONLINT_VERSION: '1.7.12'
@@ -62,26 +62,32 @@ jobs:
           cache: pip
           cache-dependency-path: |
             tests/requirements-cpu.txt
-            ci/requirements.txt
+            .github/ci/requirements.txt
             pyproject.toml
       - name: Install CPU dependencies and wheel
         run: |
-          python -m pip install -r ci/requirements.txt -r tests/requirements-cpu.txt
+          python -m pip install -r .github/ci/requirements.txt -r tests/requirements-cpu.txt
           python -m build --wheel --no-isolation
           python -m pip install --no-deps dist/*.whl
           mkdir -p artifacts
           python -m pip freeze > artifacts/installed.txt
+      - name: Extract documented examples to a temporary directory
+        run: python tests/helpers/examples.py "$RUNNER_TEMP/nano-examples"
       - name: Smoke test the installed package outside the source tree
         working-directory: ${{ runner.temp }}
         run: |
           python -c "import importlib.util; assert all(importlib.util.find_spec(name) is None for name in ('torch', 'transformers', 'triton', 'flash_attn'))"
+          python -c "import importlib.metadata as m, importlib.util as u; import nanoxpu; from pathlib import Path; import os; assert not Path(nanoxpu.__file__).is_relative_to(Path(os.environ['GITHUB_WORKSPACE'])); assert u.find_spec('nanovllm') is None; assert m.distribution('nano-xpu').metadata['Name'] == 'nano-xpu'; assert next(e for e in m.distribution('nano-xpu').entry_points if e.name == 'nano-xpu').value == 'nanoxpu.cli:main'"
           nano-xpu serve --help
           python -m nanoxpu serve --help
+          nano-xpu _worker --help
+          nano-xpu serve plan -f "$RUNNER_TEMP/nano-examples/deployment/cluster-colocated.yaml"
+          nano-xpu serve plan -f "$RUNNER_TEMP/nano-examples/deployment/cluster-pd.yaml"
       - name: Run all CPU tests
-        run: python -m pytest -q tests --strict-markers --junitxml=artifacts/cpu-tests.xml --basetemp=artifacts/pytest
+        run: python -m pytest -q tests --ignore=tests/integration --strict-markers --junitxml=artifacts/cpu-tests.xml --basetemp=artifacts/pytest
       - name: Reject empty or skipped CPU results
         if: ${{ always() }}
-        run: python ci/check_junit.py artifacts/cpu-tests.xml
+        run: python .github/ci/check_junit.py artifacts/cpu-tests.xml
       - name: Upload CPU evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -94,11 +100,62 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  cpu-integration:
+    name: cpu integration (real router and SSH)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            tests/requirements-cpu.txt
+            .github/ci/requirements.txt
+      - name: Install CPU integration prerequisites
+        run: |
+          mkdir -p artifacts
+          printf 'NANO_XPU_ROUTER_BIN=%s/nano-router/vllm-router\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+          sudo apt-get update
+          sudo apt-get install -y openssh-server build-essential pkg-config libssl-dev protobuf-compiler cmake libclang-dev libzmq3-dev
+          python -m pip install -r .github/ci/requirements.txt -r tests/requirements-cpu.txt
+          python -m pip install --no-deps --no-build-isolation -e .
+          python -m pip freeze > artifacts/integration-installed.txt
+          python -c "import importlib.util; assert all(importlib.util.find_spec(name) is None for name in ('torch', 'transformers', 'triton', 'flash_attn'))"
+      - name: Build the pinned upstream router
+        run: |
+          python .github/ci/build_router.py --source "$RUNNER_TEMP/router-source" --output "$NANO_XPU_ROUTER_BIN" 2>&1 | tee artifacts/router-build.log
+          cp "$NANO_XPU_ROUTER_BIN.source.json" "$NANO_XPU_ROUTER_BIN.help.txt" artifacts/
+      - name: Run real router and SSH integration
+        timeout-minutes: 15
+        run: |
+          python -m pytest -q tests/integration --strict-markers --junitxml=artifacts/cpu-integration.xml --basetemp=artifacts/integration-pytest
+      - name: Reject empty or skipped integration results
+        if: ${{ always() }}
+        run: python .github/ci/check_junit.py artifacts/cpu-integration.xml
+      - name: Upload integration evidence (never SSH keys or private state)
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: cpu-integration-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            artifacts/cpu-integration.xml
+            artifacts/integration-installed.txt
+            artifacts/router-build.log
+            artifacts/vllm-router.source.json
+            artifacts/vllm-router.help.txt
+            artifacts/integration-pytest/**/*.log
+          if-no-files-found: error
+          retention-days: 7
+
   # Keep this name stable for branch protection; every required job belongs in needs.
   ci-gate:
     name: ci-gate
     if: ${{ always() }}
-    needs: [static, cpu]
+    needs: [static, cpu, cpu-integration]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
@@ -106,6 +163,7 @@ jobs:
         env:
           STATIC_RESULT: ${{ needs.static.result }}
           CPU_RESULT: ${{ needs.cpu.result }}
+          INTEGRATION_RESULT: ${{ needs.cpu-integration.result }}
         run: |
-          printf 'static=%s cpu=%s\n' "$STATIC_RESULT" "$CPU_RESULT"
-          test "$STATIC_RESULT" = success && test "$CPU_RESULT" = success
+          printf 'static=%s cpu=%s integration=%s\n' "$STATIC_RESULT" "$CPU_RESULT" "$INTEGRATION_RESULT"
+          test "$STATIC_RESULT" = success && test "$CPU_RESULT" = success && test "$INTEGRATION_RESULT" = success
