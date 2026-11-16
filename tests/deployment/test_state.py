@@ -8,6 +8,38 @@ import psutil
 from nanoxpu.deployment import state
 
 
+@pytest.mark.parametrize("after", [psutil.STATUS_ZOMBIE, psutil.STATUS_DEAD, "gone", psutil.STATUS_RUNNING])
+def test_identity_read_racing_exit_does_not_hide_live_access_denial(monkeypatch, after):
+    class Process:
+        pid = 100
+
+        def __init__(self):
+            self.reading_identity = False
+
+        def is_running(self):
+            return True
+
+        def status(self):
+            if not self.reading_identity:
+                return psutil.STATUS_RUNNING
+            if after == "gone":
+                raise psutil.NoSuchProcess(self.pid)
+            return after
+
+        def environ(self):
+            self.reading_identity = True
+            raise psutil.AccessDenied(self.pid)
+
+    process = Process()
+    monkeypatch.setattr(state.psutil, "Process", lambda pid: process)
+    identity = {"pid": process.pid, "owner": "test-owner"}
+    if after == psutil.STATUS_RUNNING:
+        with pytest.raises(psutil.AccessDenied):
+            state.owned_process(identity)
+    else:
+        assert state.owned_process(identity) is None
+
+
 @pytest.mark.parametrize("child_exits", [True, False])
 def test_shutdown_continues_past_zombie_but_rejects_live_survivor(monkeypatch, child_exits):
     identities = {pid: {"pid": pid, "owner": "test-owner"} for pid in (100, 101)}

@@ -108,10 +108,17 @@ def command_hash(argv):
 
 def process_identity(pid, owner):
     process = psutil.Process(pid)
-    if process.environ().get(OWNER_ENV) != owner:
-        raise RuntimeError("process ownership marker does not match")
-    return {"pid": pid, "created_at": process.create_time(), "user": process.username(),
-            "command_hash": command_hash(process.cmdline()), "owner": owner}
+    try:
+        if process.environ().get(OWNER_ENV) != owner:
+            raise RuntimeError("process ownership marker does not match")
+        return {"pid": pid, "created_at": process.create_time(), "user": process.username(),
+                "command_hash": command_hash(process.cmdline()), "owner": owner}
+    except psutil.AccessDenied:
+        # A process can exit after our status check, making /proc identity fields
+        # unreadable. Only a confirmed exit overrides denial for a live process.
+        if process.status() in (psutil.STATUS_ZOMBIE, psutil.STATUS_DEAD):
+            raise psutil.ZombieProcess(pid) from None
+        raise
 
 
 def owned_process(identity):
