@@ -36,6 +36,8 @@ Linux 请求检查也先按[请求示例](../examples/server.md#qwen-请求检�
 
 ## 当前 CPU 部署验证
 
+2026-11-16 首次拆分 PR 的托管 CI 已运行并暴露失败；本地修正完成，但尚未推送复测。最新状态见下方“首次托管 CI 与修正”，本节原有结果仅代表当时的 Windows 验证快照。
+
 状态：本地阶段性验证，完整 CPU 集成尚未完成。2026-11-16，Windows + CPython 3.12.13；基线为 `2d61a9c8aa6eaf7eb6a928b1331f67418b5bd79b`，以下结果包含 `feat/rfc-cpu-deployment` 工作区未提交的实现。新改动没有远程 CI 结果。
 
 最新基础套件 **268 passed in 90.51s**，零失败、错误或跳过。命令为 `python -m pytest -q tests --ignore=tests/integration --strict-markers --junitxml=../../output/examples-markdown-20261116/cpu.xml --basetemp=../../output/examples-markdown-20261116/pytest`；原始报告仅保存在工作区，CI 报告由 Actions artifact 保存。耗时是单次正确性运行记录，不作性能比较。
@@ -132,3 +134,18 @@ P/D controller 正向用例在测试内部注入 `cpu-test` 期望能力，与 w
 ## 示例收敛为两份文档
 
 按最新目录约定，examples 只保留 `server.md`（四段服务启动/请求代码）与 `deploy.md`（三段 YAML）；原 README 和两个子目录已删除。提取器支持一份文档中的多个命名代码块，生成路径保持不变，CI 无需保存独立脚本。7 段代码与合并前逐字一致，19 个章节链接通过。此次运行目录约束、CLI、planner 与 HTTP 相关测试：**98 passed / 14.70s**；没有再次运行完整套件，最近一次完整结果仍为上文的 268 项通过。当前 112 个本地 Markdown 链接与 gate 64 种组合通过。证据：工作区 `output/examples-two-docs-20261116/targeted.xml`、`checks.json`。
+
+## 首次托管 CI 与修正
+
+2026-11-16，包名迁移 [PR #2](https://github.com/yangjingo/nano-xpu/pull/2) 与测试布局 [PR #3](https://github.com/yangjingo/nano-xpu/pull/3) 的 static、43 项 CPU 测试及 ci-gate 全部通过并已合入。服务实现、Linux CI 和文档 PR #4–#6 尚未合入。
+
+[服务实现首轮 CI](https://github.com/yangjingo/nano-xpu/actions/runs/43783212580) 在 Ubuntu 24.04 / CPython 3.12.16 得到 **266 通过、2 失败**。进程清理路径对已杀死、等待父进程回收的 zombie 孙进程调用 wait，超时后提前中止，无法继续清理父进程；恢复路径读取 zombie 环境还可能遭遇 AccessDenied。现在发现子进程时排除 zombie，强制停止等待超时后重新核验是否仍存活；活进程、身份变化和权限错误仍按原规则拒绝。新增回归在修复前为 2 失败、2 通过，修复后验证已退出子进程不阻断父进程清理，存活或无权限的进程仍报错。
+
+另一失败来自测试把“允许 fence”当成“复制线程已经完成”。测试改为等待 finished 事件再允许 fence，然后执行非阻塞 tick；生产 StageEngine 的完成判定、隔离与释放条件保持不变。修正提交 `2feaa0d98fe9d709cb971dfcd072e2e9a2d44770` 在 Windows / CPython 3.12.13 的针对性 **49 项通过（17.55s）**，完整基础套件 **272 项通过（72.44s）**，零失败、错误或跳过。证据为工作区 `output/pr-split-20261116/fix-before.xml`、`fix-targeted.xml`、`fix-cpu.xml`；Linux 修正结果待重新执行，不能由 Windows 结果代替。
+
+[Linux 集成首轮 CI](https://github.com/yangjingo/nano-xpu/actions/runs/43783218206) 已成功构建固定源码 router，18 项实际执行得到 **8 通过、10 失败**；[文档分支同轮 CI](https://github.com/yangjingo/nano-xpu/actions/runs/43783224508) 为 **11 通过、7 失败**。两轮均未通过 ci-gate，差异不能解释为协议问题已经解决。
+
+- router 转发的 `expires_at` 从 `1794791073.3999841` 变为 `1794791073.399984`，导致元数据精确比较失败；StageEngine 同轮有两项 descriptor 不兼容失败。固定 [router 提交的 Cargo.toml](https://github.com/vllm-project/router/blob/07c20da66c255ba65a97ab531f9fb5f60413a7d4/Cargo.toml) 只为 serde_json 显式开启 preserve_order。本地构建脚本补充 `serde_json/float_roundtrip` 并写入收据，保留原始源码、Cargo.lock、精确比较和期限校验。[serde_json 的说明](https://github.com/serde-rs/json/blob/v1.0.145/Cargo.toml) 明确该选项保证 f64 经 JSON 往返后不改变，并增加浮点解析成本；本项目尚未测量吞吐影响。它是否消除本轮真实 router 失败须由重跑确认。
+- 七项 SSH 用例均被 sshd 以 `bad ownership or modes for directory /tmp` 拒绝。夹具私有临时目录迁到当前用户 home 下，继续使用 0700 目录、0600 authorized_keys、`StrictModes yes` 和严格 host key 校验；目录仍不在 artifact 上传范围。未关闭 SSH 检查来绕过失败。
+
+修正后的 Ruff、compileall、6 项 JUnit 校验器测试通过；18 项集成可收集，但修正后的真实 Linux 构建、SSH 和 router 测试仍待推送后执行。只有三项 job 及 ci-gate 全部成功才能继续合并。CUDA、真实模型与生产 NIXL/P/D 仍不属于这些 CPU 结果。

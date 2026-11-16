@@ -27,7 +27,7 @@
 - vLLM `730194d2362716c47648d06e172c91bcdace3b32`：[pre-commit.yml](https://github.com/vllm-project/vllm/blob/730194d2362716c47648d06e172c91bcdace3b32/.github/workflows/pre-commit.yml) 将便宜的静态检查独立运行，[engine.yaml](https://github.com/vllm-project/vllm/blob/730194d2362716c47648d06e172c91bcdace3b32/.buildkite/test_areas/engine.yaml) 声明领域测试与依赖。本仓先保留独立静态任务、可本地执行的原生测试命令，不引入 Buildkite 或路径选测。
 - SGLang `40723a52ded9229e221a437254f34bc8a3327251`：[pr-test.yml 的 pr-test-finish](https://github.com/sgl-project/sglang/blob/40723a52ded9229e221a437254f34bc8a3327251/.github/workflows/pr-test.yml) 在任务结束后集中检查结果。本仓借鉴固定汇总任务，但所有 CPU 基础任务必跑，因此采用更严格的“全部 success”，不允许 skipped。
 
-不复制上游的设备矩阵、机器人授权、分片和夜间任务。当前基础套件规模适合完整运行；真实 router 编译单独占用一个 job，避免阻塞便宜检查的反馈。Python 直接依赖版本固定，传递依赖尚未完整锁定；CI 输出实际安装列表。router 固定源码提交、Cargo.lock 和上游使用的 Rust 1.95.0，构建后记录二进制 SHA256，不以相同包版本号代替源码证明。
+不复制上游的设备矩阵、机器人授权、分片和夜间任务。当前基础套件规模适合完整运行；真实 router 编译单独占用一个 job，避免阻塞便宜检查的反馈。Python 直接依赖版本固定，传递依赖尚未完整锁定；CI 输出实际安装列表。router 固定源码提交、Cargo.lock 和上游使用的 Rust 1.95.0，显式启用 `serde_json/float_roundtrip`，使 KV 元数据的浮点期限经 JSON 转发后保持原值；构建收据记录 feature 与二进制 SHA256，不以相同包版本号代替源码证明。首次托管 CI 的失败、修正与待复测项见 [验证记录](testing.md#首次托管-ci-与修正)。
 
 ## Agent 反串讲
 
@@ -39,15 +39,15 @@
 
 | 用例 | 输入与步骤 | 通过标准 | 实际结果 |
 |---|---|---|---|
-| CPU-01 | 安装 CPU 依赖，构建并安装 wheel；运行除 `tests/integration/` 外的基础测试 | 用例非空、零失败、零错误、零跳过 | 当前 Windows / CPython 3.12.13 源码测试 268 passed，90.51s；修复后 wheel 构建和独立目录安装通过；Windows ledger 修复及本轮 HTTP 退出间歇超时记录见 testing.md；旧版 43 项托管测试仅是历史结果 |
-| CPU-02 | 在源码目录外执行安装后的 CLI help | 入口可运行，不导入 CUDA 核心依赖 | 当前 nano-xpu wheel 的元数据、nanoxpu 入口与旧包缺失检查通过；serve/_worker help 与两类 serve plan 和 runtime-info 模块入口通过，确认导入安装目录且无四个 CUDA 核心依赖；原 main 托管 console 入口已通过，当前 Linux console 待新 CI |
+| CPU-01 | 安装 CPU 依赖，构建并安装 wheel；运行除 `tests/integration/` 外的基础测试 | 用例非空、零失败、零错误、零跳过 | 首次托管基础套件 266 通过、2 失败；修正后的 Windows / CPython 3.12.13 基础套件 272 通过（72.44s），Linux 修正结果待复测；详见 testing.md |
+| CPU-02 | 在源码目录外执行安装后的 CLI help | 入口可运行，不导入 CUDA 核心依赖 | 当前 nano-xpu wheel 的元数据、nanoxpu 入口与旧包缺失检查通过；serve/_worker help 与两类 serve plan 和 runtime-info 模块入口通过，确认导入安装目录且无四个 CUDA 核心依赖；首轮新 CI 的 Linux console 与源码外 wheel smoke 已通过，后续测试失败仍阻止 job 通过 |
 | CPU-03 | Ruff、compileall、actionlint | Python 与工作流的基础错误检查通过 | Ruff 0.14.4、compileall、actionlint 1.7.12 通过；本地无 ShellCheck/Pyflakes，actionlint 的对应外部检查未运行 |
-| CPU-04 | 校验成功、失败、错误、空、skip、缺失和损坏 JUnit | 仅非空且全成功的报告通过 | 6 个 unittest 通过，包含 failure/error/skipped 子用例及部分 skip；当前 268 项报告接受 |
+| CPU-04 | 校验成功、失败、错误、空、skip、缺失和损坏 JUnit | 仅非空且全成功的报告通过 | 6 个 unittest 通过，包含 failure/error/skipped 子用例及部分 skip；最新 272 项报告接受；首轮托管失败报告被正确拒绝 |
 | CPU-05 | 将汇总的三个依赖分别设为 success/failure/cancelled/skipped | 仅三个 success 返回 0 | 从当前 YAML 提取实际 Bash，Git Bash 执行全部 64 种组合通过；不代表已验证 GitHub 调度 |
-| CPU-06 | GitHub 上 PR/main push；检查报告下载和 required check | 均有结论，结果对应当前提交；配置保护后失败阻止合入 | 原 main 三个 job 全部成功；新增集成 job 未运行，required check 设置未核验 |
-| CPU-07 | 固定源码 router，单/双 worker、P/D 预算和元数据、失败/断连 | 真实转发正确、无意外重放；内部 P 输出不泄漏 | 已编写，Linux 待执行 |
-| CPU-08 | 临时 sshd、严格 host key、controller 与恢复 CLI | 未信任 host 拒绝；重复 up 不增进程；启动失败回滚；down 无持有进程残留 | 已编写，Linux 待执行 |
-| CPU-09 | 真实 router → HTTP P/D StageEngine → CPU 数组复制 | 输出/usage 与完整 CPU Prefill 基线一致，D 只恢复最后 prompt token，结束后无占用块 | 3 项用例已编写、待真实 router；相同 HTTP fixture 已在 Windows 直接 P→D 验证 L=1/5/17，三项通过；KV 仍为进程内数组，不是跨进程传输 |
+| CPU-06 | GitHub 上 PR/main push；检查报告下载和 required check | 均有结论，结果对应当前提交；配置保护后失败阻止合入 | #2/#3 检查通过并合入；#4–#6 的失败使 ci-gate 失败，尚未合入；不能据此声称仓库已配置强制保护 |
+| CPU-07 | 固定源码 router，单/双 worker、P/D 预算和元数据、失败/断连 | 真实转发正确、无意外重放；内部 P 输出不泄漏 | 首轮已运行；router 元数据出现浮点末位变化，SSH 被 StrictModes 拒绝；对应修正待 Linux 复测，详见 testing.md |
+| CPU-08 | 临时 sshd、严格 host key、controller 与恢复 CLI | 未信任 host 拒绝；重复 up 不增进程；启动失败回滚；down 无持有进程残留 | 首轮已运行；router 元数据出现浮点末位变化，SSH 被 StrictModes 拒绝；对应修正待 Linux 复测，详见 testing.md |
+| CPU-09 | 真实 router → HTTP P/D StageEngine → CPU 数组复制 | 输出/usage 与完整 CPU Prefill 基线一致，D 只恢复最后 prompt token，结束后无占用块 | 首轮真实 router 3 项中 1 通过、2 项 descriptor 不兼容；文档分支同轮 3 项通过，浮点往返的偶现问题仍需修正后复测；KV 为进程内数组，不是跨进程传输 |
 
 本地干净安装首次复测遗漏创建 `artifacts/`，出现 5 passed / 38 errors；原因是 `--basetemp` 的父目录不存在。工作流已有 `mkdir -p artifacts`，已修正文档的复现命令并重跑得到上表结果。工作区证据保存于 `../../output/ci-workflow-audit-20261115/`（不随仓库发布）：`cpu-tests.xml`、初次失败报告、`ci-validation.json`。3 份 Issue 模板元数据、PR 模板、36 个本地文档链接和 `git diff --check` 均已检查。耗时只是单次本地正确性运行记录，不是性能结论。
 
@@ -87,7 +87,7 @@ python -m pytest -q tests/integration --strict-markers --junitxml=artifacts/cpu-
 python .github/ci/check_junit.py artifacts/cpu-integration.xml
 ```
 
-SSH 测试通过 `sudo -n` 启动仅监听 localhost 随机高位端口的独立 sshd，不修改系统 SSH 配置。测试临时生成 host/client key，以专用 known_hosts 验证主机身份；关闭时只停止核对过身份的测试 daemon。密钥和运行状态保存在独立临时目录，artifact 只上传列出的日志、JUnit、安装清单、router 构建来源和 help；不上传临时目录。controller 测试使用独立、已提交的临时源码副本检查实际 helper/worker 的导入来源，生产 CLI 不增加 CPU 模拟开关。
+SSH 测试通过 `sudo -n` 启动仅监听 localhost 随机高位端口的独立 sshd，不修改系统 SSH 配置。测试临时生成 host/client key，以专用 known_hosts 验证主机身份；关闭时只停止核对过身份的测试 daemon。密钥和运行状态保存在当前用户 home 下的独立私有临时目录，使授权文件的祖先路径满足 `StrictModes yes`，不用可被其他用户写入的 `/tmp`。artifact 只上传列出的日志、JUnit、安装清单、router 构建来源和 help；不上传临时目录。controller 测试使用独立、已提交的临时源码副本检查实际 helper/worker 的导入来源，生产 CLI 不增加 CPU 模拟开关。
 
 本地可审阅的工作流与模板准备完成后，按仓库发布规范校核并推送。在 GitHub 完成一次成功运行后，把 job 名 `ci-gate` 配为 main 的 required status check，并确认来源为 GitHub Actions；YAML 自身不会设置分支保护。Issue 模板进入默认分支后才出现在新建选择页。当前不配置自动合入、远程发布、标签或人员指派。
 
