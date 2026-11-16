@@ -1,5 +1,5 @@
+from tests.helpers.http import payload, client_for
 import asyncio
-from contextlib import asynccontextmanager
 import importlib.metadata
 import os
 from pathlib import Path
@@ -16,21 +16,11 @@ import pytest
 from nanoxpu.cli import parse_config
 from nanoxpu.server.app import create_app
 from nanoxpu.server.config import ServerConfig
-from tests.support import TestEngine
+from tests.helpers.support import TestEngine
 
 
-def payload(**changes):
-    return {"model": "qwen-test", "messages": [{"role": "user", "content": "hello"}], "max_tokens": 8, **changes}
 
 
-@asynccontextmanager
-async def client_for(tmp_path, engine=None):
-    config = ServerConfig(str(tmp_path), served_model_name="qwen-test")
-    engine = engine or TestEngine(config)
-    app = create_app(config, lambda _: engine)
-    async with app.router.lifespan_context(app):
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-            yield client, app, engine
 
 
 def test_imports_and_help_do_not_load_cuda():
@@ -202,7 +192,7 @@ def test_real_http_subprocess_and_same_port_restart(tmp_path):
     for iteration in range(2):
         with log_path.open("a", encoding="utf-8") as log:
             command = [
-                sys.executable, "-m", "tests.cpu_server", "serve", str(tmp_path),
+                sys.executable, "-m", "tests.helpers.cpu_server", "serve", str(tmp_path),
                 "--port", str(port), "--served-model-name", "qwen3-0.6b",
             ]
             powershell = shutil.which("pwsh") if sys.platform == "win32" else None
@@ -251,7 +241,7 @@ import time
 from nanoxpu.server.app import create_app
 from nanoxpu.server.config import ServerConfig
 from nanoxpu.server.runtime import ManagedServer
-from tests.support import TestEngine
+from tests.helpers.support import TestEngine
 config = ServerConfig('.')
 server = ManagedServer(create_app(config, TestEngine), config, shutdown_timeout=0.1)
 server.request_shutdown()

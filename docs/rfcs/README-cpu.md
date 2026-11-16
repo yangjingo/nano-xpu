@@ -48,7 +48,7 @@ $env:PYTHONPATH = Join-Path (Get-Location) '.cpu-deps'
 终端 1（使用上面准备的 Python/PYTHONPATH）：
 
 ```powershell
-& $python312 -m tests.cpu_server serve . --served-model-name qwen3-0.6b --port 8000
+& $python312 -m tests.helpers.cpu_server serve . --served-model-name qwen3-0.6b --port 8000
 ```
 
 这会使用当前目录作为测试配置路径，**不读取模型权重**。控制台和输出文本都会标记 CPU TEST。该 harness 使用与生产相同的 HTTP app 和 ManagedServer，仅替换引擎，并附带仅测试环境存在的 shutdown 路由。
@@ -67,7 +67,7 @@ Invoke-RestMethod http://127.0.0.1:8000/v1/chat/completions -Method Post -Conten
 Invoke-RestMethod http://127.0.0.1:8000/__test__/shutdown -Method Post
 ```
 
-Linux 上可用 `python -m tests.cpu_server serve . --served-model-name qwen3-0.6b` 拉起同一测试服务，再执行 [`request-qwen.sh`](examples/request-qwen.sh)。该调用脚本只校验接口响应，不自行断言服务后端是真实模型；真实 Qwen 验收必须另附模型、设备和服务启动证据。
+Linux 上可用 `python -m tests.helpers.cpu_server serve . --served-model-name qwen3-0.6b` 拉起同一测试服务，再执行 [`request-qwen.sh`](examples/request-qwen.sh)。该调用脚本只校验接口响应，不自行断言服务后端是真实模型；真实 Qwen 验收必须另附模型、设备和服务启动证据。
 
 ## 验证范围
 

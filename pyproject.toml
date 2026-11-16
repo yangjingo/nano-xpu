@@ -33,6 +33,9 @@ test = ["pytest==9.0.3", "httpx==0.28.1", "numpy", "xxhash"]
 where = ["."]
 include = ["nanoxpu*"]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [tool.ruff]
 target-version = "py312"
 extend-exclude = [".cpu-deps", ".venv-server"]
