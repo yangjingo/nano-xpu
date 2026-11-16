@@ -136,6 +136,10 @@ def stop_owned_tree(identity, timeout):
     children = []
     for child in parent.children(recursive=True):
         try:
+            # Exited descendants can remain in /proc until their parent reaps
+            # them; their environment may already be unreadable.
+            if child.status() == psutil.STATUS_ZOMBIE:
+                continue
             children.append(process_identity(child.pid, identity["owner"]))
         except (psutil.NoSuchProcess, psutil.ZombieProcess):
             pass
@@ -164,4 +168,7 @@ def stop_owned_tree(identity, timeout):
             try:
                 process.wait(timeout=2)
             except psutil.TimeoutExpired as exc:
-                raise RuntimeError("owned process survived forced shutdown; keep ledger for recovery") from exc
+                # wait() cannot reap a grandchild. A zombie has stopped executing
+                # and must not prevent us from reaching its still-live parent.
+                if owned_process(entry) is not None:
+                    raise RuntimeError("owned process survived forced shutdown; keep ledger for recovery") from exc
