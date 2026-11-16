@@ -3,6 +3,7 @@
 These tests are lifecycle evidence only. Linux real-router tests must separately prove forwarding.
 """
 from dataclasses import replace
+import logging
 import sys
 
 import httpx
@@ -26,7 +27,17 @@ class LocalHelper:
         if request["action"] == "preflight" and request["role_id"] == "router":
             # This fixture is an inert process, not a vllm-router binary.
             request = {key: value for key, value in request.items() if key != "router_revision"}
-        response = helper(self.root, request, cwd=request.get("spec", {}).get("workdir"))
+        try:
+            response = helper(self.root, request, cwd=request.get("spec", {}).get("workdir"))
+        except AssertionError as exc:
+            # Controller retains only the exception class. Preserve the synthetic
+            # helper failure in pytest output without logging bootstrap credentials.
+            detail = str(exc)
+            token = request.get("auth_token")
+            if token:
+                detail = detail.replace(token, "[REDACTED]")
+            logging.getLogger(__name__).error("helper %s/%s failed: %s", request["action"], request["role_id"], detail)
+            raise
         if request["action"] == "start":
             self.starts.append(response)
         return response
