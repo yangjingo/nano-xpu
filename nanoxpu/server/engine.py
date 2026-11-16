@@ -15,6 +15,7 @@ class Completion:
     prompt_tokens: int
     completion_tokens: int
     finish_reason: str
+    kv_transfer_params: dict | None = None
 
 
 class Engine(Protocol):
@@ -29,8 +30,11 @@ class NanoEngine:
     def __init__(self, config: ServerConfig):
         self.config = config
         self.llm = None
+        self.capabilities = None
 
     def start(self):
+        if self.config.role != "colocated":
+            raise RuntimeError("Production P/D requires a validated device connector; no simulated fallback is provided")
         import torch
         if not torch.cuda.is_available():
             raise RuntimeError("nano-xpu inference requires CUDA; no CPU inference backend is available")
@@ -52,12 +56,16 @@ class NanoEngine:
             config.model,
             tensor_parallel_size=config.tensor_parallel_size,
             distributed_port=config.distributed_port,
+            instance_id=config.instance_id,
+            engine_generation=config.engine_generation,
             max_model_len=config.max_model_len,
             max_num_batched_tokens=config.max_num_batched_tokens,
             max_num_seqs=config.max_num_seqs,
             gpu_memory_utilization=config.gpu_memory_utilization,
             enforce_eager=config.enforce_eager,
         )
+        from nanoxpu.server.metadata import Capabilities, Fingerprints, model_fingerprints
+        self.capabilities = Capabilities(fingerprints=Fingerprints(**model_fingerprints(config.model)))
 
     def complete(self, request):
         from nanoxpu import SamplingParams

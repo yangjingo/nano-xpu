@@ -1,4 +1,4 @@
-# Install separately from CUDA dependencies; see docs/rfcs/README-cpu.md.
+# Install separately from CUDA dependencies; see docs/testing.md.
 fastapi==0.136.3
 uvicorn==0.48.0
 pydantic==2.13.4
@@ -6,3 +6,5 @@ httpx==0.28.1
 pytest==9.0.3
 numpy==2.4.6
 xxhash==3.6.0
+PyYAML==6.0.3
+psutil==7.0.0

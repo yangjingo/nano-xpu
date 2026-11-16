@@ -10,6 +10,7 @@ from nanoxpu.sampling_params import SamplingParams
 from nanoxpu.engine.sequence import Sequence
 from nanoxpu.engine.scheduler import Scheduler
 from nanoxpu.engine.model_runner import ModelRunner
+from nanoxpu.engine.process_lifecycle import WorkerProcesses
 
 
 class LLMEngine:
@@ -19,19 +20,22 @@ class LLMEngine:
         config_kwargs = {k: v for k, v in kwargs.items() if k in config_fields}
         config = Config(model, **config_kwargs)
         Sequence.block_size = config.kvcache_block_size
-        self.ps = []
+        self.workers = WorkerProcesses()
+        self.ps = self.workers.processes
         self.events = []
         ctx = mp.get_context("spawn")
-        for i in range(1, config.tensor_parallel_size):
-            event = ctx.Event()
-            process = ctx.Process(target=ModelRunner, args=(config, i, event))
-            process.start()
-            self.ps.append(process)
-            self.events.append(event)
-        self.model_runner = ModelRunner(config, 0, self.events)
-        self.tokenizer = AutoTokenizer.from_pretrained(config.model, use_fast=True)
-        config.eos = self.tokenizer.eos_token_id
-        self.scheduler = Scheduler(config)
+        try:
+            for i in range(1, config.tensor_parallel_size):
+                event = ctx.Event()
+                self.workers.start(ctx.Process(target=ModelRunner, args=(config, i, event)))
+                self.events.append(event)
+            self.model_runner = ModelRunner(config, 0, self.events)
+            self.tokenizer = AutoTokenizer.from_pretrained(config.model, use_fast=True)
+            config.eos = self.tokenizer.eos_token_id
+            self.scheduler = Scheduler(config)
+        except BaseException:
+            self.workers.stop(timeout=1)
+            raise
         self._closed = False
         atexit.register(self.exit)
 
@@ -40,10 +44,11 @@ class LLMEngine:
             return
         self._closed = True
         atexit.unregister(self.exit)
-        self.model_runner.call("exit")
-        del self.model_runner
-        for p in self.ps:
-            p.join()
+        try:
+            self.model_runner.call("exit")
+            del self.model_runner
+        finally:
+            self.workers.stop(timeout=5, graceful=True)
 
     def add_request(self, prompt: str | list[int], sampling_params: SamplingParams):
         if isinstance(prompt, str):

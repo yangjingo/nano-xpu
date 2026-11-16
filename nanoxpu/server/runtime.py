@@ -20,7 +20,13 @@ class ManagedServer(uvicorn.Server):
 
     def force_shutdown(self):
         logging.getLogger(__name__).error("Engine shutdown timed out; forcing process exit")
-        os._exit(1)
+        try:
+            from nanoxpu.engine.process_lifecycle import stop_all_workers
+            stop_all_workers(timeout=1)
+        except Exception:
+            logging.getLogger(__name__).exception("TP worker cleanup failed during forced exit")
+        finally:
+            os._exit(1)
 
     def request_shutdown(self):
         self.app.state.service.ready = False

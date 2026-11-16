@@ -100,14 +100,41 @@ class BlockManager:
         seq.num_cached_tokens = 0
         seq.block_table.clear()
 
+    def reserve_private(self, seq: Sequence, capacity_tokens: int):
+        """Reserve a whole P/D attempt without borrowing or publishing prefix-cache blocks."""
+        if seq.block_table or capacity_tokens < len(seq):
+            raise ValueError("private reservation requires an empty block table and sufficient capacity")
+        count = (capacity_tokens + self.block_size - 1) // self.block_size
+        if count > len(self.free_block_ids):
+            raise ValueError("insufficient private KV block capacity")
+        seq.private_kv = True
+        seq.block_table = [self._allocate_block() for _ in range(count)]
+
+    def retain(self, block_ids):
+        if len(set(block_ids)) != len(block_ids) or any(block not in self.used_block_ids for block in block_ids):
+            raise ValueError("cannot retain blocks outside an owned allocation")
+        for block_id in block_ids:
+            self.blocks[block_id].ref_count += 1
+
+    def release(self, block_ids):
+        if len(set(block_ids)) != len(block_ids) or any(block not in self.used_block_ids for block in block_ids):
+            raise ValueError("cannot release unowned blocks")
+        for block_id in reversed(block_ids):
+            block = self.blocks[block_id]
+            block.ref_count -= 1
+            if block.ref_count == 0:
+                self._deallocate_block(block_id)
+
     def can_append(self, seq: Sequence) -> bool:
-        return len(self.free_block_ids) >= (len(seq) % self.block_size == 1)
+        return len(self.free_block_ids) >= max(0, seq.num_blocks - len(seq.block_table))
 
     def may_append(self, seq: Sequence):
-        if len(seq) % self.block_size == 1:
+        while len(seq.block_table) < seq.num_blocks:
             seq.block_table.append(self._allocate_block())
 
     def hash_blocks(self, seq: Sequence):
+        if seq.private_kv:
+            return
         start = seq.num_cached_tokens // self.block_size
         end = (seq.num_cached_tokens + seq.num_scheduled_tokens) // self.block_size
         if start == end: return

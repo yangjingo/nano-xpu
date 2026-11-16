@@ -129,3 +129,7 @@ core inference engine goes to the nano-vllm project.
 ## License
 
 [MIT](LICENSE)
+
+## Configuration-driven serving
+
+Use `nano-xpu serve -f cluster.yaml` for all public serving modes. See the [deployment guide](docs/deployment.md) and [documented examples](examples/deploy.md). The internal worker is launched by the controller; direct model arguments are no longer accepted. CPU control tests do not validate real GPU/NIXL serving.

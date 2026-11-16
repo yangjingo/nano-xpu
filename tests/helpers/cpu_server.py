@@ -1,12 +1,18 @@
 """Start an explicitly test-only HTTP server for CPU smoke verification."""
-from nanoxpu.cli import parse_config
+from nanoxpu.server.cli import parse_config
 from nanoxpu.server.app import create_app
 from tests.helpers.support import TestEngine
 from nanoxpu.server.runtime import ManagedServer
+import sys
 
 
 def main():
-    config = parse_config()
+    if sys.argv[1:] == ["runtime-info"]:
+        from nanoxpu.cli import main as cli_main
+        return cli_main(["runtime-info"])
+    if sys.argv[1:2] != ["_worker"]:
+        raise SystemExit("test harness requires the internal _worker entry")
+    config = parse_config(sys.argv[2:])
     app = create_app(config, TestEngine)
     server = ManagedServer(app, config)
 

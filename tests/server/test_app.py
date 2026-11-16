@@ -2,7 +2,6 @@ from tests.helpers.http import payload, client_for
 import asyncio
 import importlib.metadata
 import os
-from pathlib import Path
 import socket
 import shutil
 import subprocess
@@ -13,7 +12,7 @@ import time
 import httpx
 import pytest
 
-from nanoxpu.cli import parse_config
+from nanoxpu.server.cli import parse_config
 from nanoxpu.server.app import create_app
 from nanoxpu.server.config import ServerConfig
 from tests.helpers.support import TestEngine
@@ -23,8 +22,8 @@ from tests.helpers.support import TestEngine
 
 
 
-def test_imports_and_help_do_not_load_cuda():
-    result = subprocess.run([sys.executable, "-c", "import nanoxpu, nanoxpu.server.app, sys; assert not any(x in sys.modules for x in ('torch', 'transformers', 'triton', 'flash_attn')); from nanoxpu.cli import main; main(['serve', '--help'])"], capture_output=True, text=True)
+def test_imports_and_worker_help_do_not_load_cuda():
+    result = subprocess.run([sys.executable, "-c", "import nanoxpu, nanoxpu.server.app, sys; assert not any(x in sys.modules for x in ('torch', 'transformers', 'triton', 'flash_attn')); from nanoxpu.cli import main; main(['_worker', '--help'])"], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     assert "--tensor-parallel-size" in result.stdout
     assert "--max-num-batched-tokens" in result.stdout
@@ -44,22 +43,22 @@ def test_console_entry_point():
 ])
 def test_cli_rejects_invalid_configuration(tmp_path, flag, value):
     with pytest.raises(SystemExit) as exc:
-        parse_config(["serve", str(tmp_path), flag, value])
+        parse_config([str(tmp_path), flag, value])
     assert exc.value.code == 2
 
 
 def test_cli_missing_model(tmp_path):
     with pytest.raises(SystemExit):
-        parse_config(["serve", str(tmp_path / "missing")])
+        parse_config([str(tmp_path / "missing")])
 
 
 def test_cli_rejects_empty_model_alias(tmp_path):
     with pytest.raises(SystemExit):
-        parse_config(["serve", str(tmp_path), "--served-model-name", ""])
+        parse_config([str(tmp_path), "--served-model-name", ""])
 
 
 def test_split_configuration_is_forwarded(tmp_path):
-    config = parse_config(["serve", str(tmp_path), "--tensor-parallel-size", "2", "--max-num-batched-tokens", "128", "--max-num-seqs", "16", "--distributed-port", "2345"])
+    config = parse_config([str(tmp_path), "--tensor-parallel-size", "2", "--max-num-batched-tokens", "128", "--max-num-seqs", "16", "--distributed-port", "2345"])
     async def scenario():
         engine = TestEngine(config)
         app = create_app(config, lambda config_seen: engine if config_seen == config else None)
@@ -182,7 +181,7 @@ def test_fatal_generation_marks_unhealthy(tmp_path):
     asyncio.run(scenario())
 
 
-def test_real_http_subprocess_and_same_port_restart(tmp_path):
+def test_real_http_subprocess_and_same_port_restart(tmp_path, example_files):
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
@@ -192,12 +191,12 @@ def test_real_http_subprocess_and_same_port_restart(tmp_path):
     for iteration in range(2):
         with log_path.open("a", encoding="utf-8") as log:
             command = [
-                sys.executable, "-m", "tests.helpers.cpu_server", "serve", str(tmp_path),
+                sys.executable, "-m", "tests.helpers.cpu_server", "_worker", str(tmp_path),
                 "--port", str(port), "--served-model-name", "qwen3-0.6b",
             ]
             powershell = shutil.which("pwsh") if sys.platform == "win32" else None
             if powershell and iteration == 0:
-                command = [powershell, "-NoProfile", "-File", "docs/rfcs/examples/serve-cpu.ps1",
+                command = [powershell, "-NoProfile", "-File", str(example_files / "serve/serve-cpu.ps1"),
                            "-Python", sys.executable, "-Port", str(port)]
             process = subprocess.Popen(command, stdout=log, stderr=log, creationflags=flags)
             try:
@@ -213,7 +212,7 @@ def test_real_http_subprocess_and_same_port_restart(tmp_path):
                         assert time.monotonic() < deadline, log_path.read_text(encoding="utf-8")
                         time.sleep(0.1)
                     # Exercise the supplied request script's embedded Python over a real socket.
-                    script = Path("docs/rfcs/examples/request-qwen.sh").read_text(encoding="utf-8")
+                    script = (example_files / "serve/request-qwen.sh").read_text(encoding="utf-8")
                     source = script.split("python - <<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
                     env = {**os.environ, "BASE_URL": url, "SERVED_MODEL_NAME": "qwen3-0.6b"}
                     call = subprocess.run([sys.executable, "-c", source], env=env, capture_output=True, text=True, timeout=10)
@@ -221,7 +220,7 @@ def test_real_http_subprocess_and_same_port_restart(tmp_path):
                     assert "CPU TEST ENGINE" in call.stdout
                     if powershell and iteration == 0:
                         call = subprocess.run([
-                            powershell, "-NoProfile", "-File", "docs/rfcs/examples/request-cpu.ps1",
+                            powershell, "-NoProfile", "-File", str(example_files / "serve/request-cpu.ps1"),
                             "-BaseUrl", url, "-Shutdown",
                         ], capture_output=True, text=True, timeout=10)
                         assert call.returncode == 0, call.stderr
