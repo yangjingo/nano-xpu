@@ -33,21 +33,21 @@
 
 例如 PR 修改了请求取消逻辑：GitHub 检出该次待测提交，CPU job 安装其 wheel，pytest 发起一次请求并取消等待，测试引擎继续运行；用例确认后台完成前不会放出槽位。pytest 把断言结果写入 JUnit，校验器拒绝空跑、失败或跳过，job 结果再交给 `ci-gate`。报告只属于当前 run/attempt，不从缓存读取旧的通过结果。
 
-为什么有效？它用可重复的请求与状态变化检查基础行为，并把错误沿退出码传到汇总。哪里无效？桩不执行模型或设备操作。代价在哪里？所有 PR 都运行便宜测试，换来较少的选测规则。怎样证伪？注入断言失败、空报告、skip 和取消状态，任何一种还能得到通过就是 CI 缺陷。剩余关键环境差异是 Windows 本地验证与 Ubuntu 托管运行，需要上线后记录真实运行链接。
+为什么有效？它用可重复的请求与状态变化检查基础行为，并把错误沿退出码传到汇总。哪里无效？桩不执行模型或设备操作。代价在哪里？所有 PR 都运行便宜测试，换来较少的选测规则。怎样证伪？注入断言失败、空报告、skip 和取消状态，任何一种还能得到通过就是 CI 缺陷。Windows 与 Ubuntu 的实际差异已在托管运行中暴露；运行链接、真实通过与失败及后续修复状态见 testing.md。
 
 ## 验收设计与结果
 
 | 用例 | 输入与步骤 | 通过标准 | 实际结果 |
 |---|---|---|---|
-| CPU-01 | 安装 CPU 依赖，构建并安装 wheel；运行除 `tests/integration/` 外的基础测试 | 用例非空、零失败、零错误、零跳过 | 首次托管基础套件 266 通过、2 失败；修正后的 Windows / CPython 3.12.13 基础套件 272 通过（72.44s），Linux 修正结果待复测；详见 testing.md |
+| CPU-01 | 安装 CPU 依赖，构建并安装 wheel；运行除 `tests/integration/` 外的基础测试 | 用例非空、零失败、零错误、零跳过 | #4 第二轮 Linux 基础 272 项通过；#5 同轮暴露一次退出竞态，271 通过、1 失败。独立修正后本地 276 项通过（91.51s），新的 Linux 结果待验证；详见 testing.md |
 | CPU-02 | 在源码目录外执行安装后的 CLI help | 入口可运行，不导入 CUDA 核心依赖 | 当前 nano-xpu wheel 的元数据、nanoxpu 入口与旧包缺失检查通过；serve/_worker help 与两类 serve plan 和 runtime-info 模块入口通过，确认导入安装目录且无四个 CUDA 核心依赖；首轮新 CI 的 Linux console 与源码外 wheel smoke 已通过，后续测试失败仍阻止 job 通过 |
 | CPU-03 | Ruff、compileall、actionlint | Python 与工作流的基础错误检查通过 | Ruff 0.14.4、compileall、actionlint 1.7.12 通过；本地无 ShellCheck/Pyflakes，actionlint 的对应外部检查未运行 |
-| CPU-04 | 校验成功、失败、错误、空、skip、缺失和损坏 JUnit | 仅非空且全成功的报告通过 | 6 个 unittest 通过，包含 failure/error/skipped 子用例及部分 skip；最新 272 项报告接受；首轮托管失败报告被正确拒绝 |
+| CPU-04 | 校验成功、失败、错误、空、skip、缺失和损坏 JUnit | 仅非空且全成功的报告通过 | 6 个 unittest 通过，包含 failure/error/skipped 子用例及部分 skip；最新 276 项报告接受；首轮托管失败报告被正确拒绝 |
 | CPU-05 | 将汇总的三个依赖分别设为 success/failure/cancelled/skipped | 仅三个 success 返回 0 | 从当前 YAML 提取实际 Bash，Git Bash 执行全部 64 种组合通过；不代表已验证 GitHub 调度 |
-| CPU-06 | GitHub 上 PR/main push；检查报告下载和 required check | 均有结论，结果对应当前提交；配置保护后失败阻止合入 | #2/#3 检查通过并合入；#4–#6 的失败使 ci-gate 失败，尚未合入；不能据此声称仓库已配置强制保护 |
-| CPU-07 | 固定源码 router，单/双 worker、P/D 预算和元数据、失败/断连 | 真实转发正确、无意外重放；内部 P 输出不泄漏 | 首轮已运行；router 元数据出现浮点末位变化，SSH 被 StrictModes 拒绝；对应修正待 Linux 复测，详见 testing.md |
-| CPU-08 | 临时 sshd、严格 host key、controller 与恢复 CLI | 未信任 host 拒绝；重复 up 不增进程；启动失败回滚；down 无持有进程残留 | 首轮已运行；router 元数据出现浮点末位变化，SSH 被 StrictModes 拒绝；对应修正待 Linux 复测，详见 testing.md |
-| CPU-09 | 真实 router → HTTP P/D StageEngine → CPU 数组复制 | 输出/usage 与完整 CPU Prefill 基线一致，D 只恢复最后 prompt token，结束后无占用块 | 首轮真实 router 3 项中 1 通过、2 项 descriptor 不兼容；文档分支同轮 3 项通过，浮点往返的偶现问题仍需修正后复测；KV 为进程内数组，不是跨进程传输 |
+| CPU-06 | GitHub 上 PR/main push；检查报告下载和 required check | 均有结论，结果对应当前提交；配置保护后失败阻止合入 | #2/#3/#4 检查通过并合入；第二轮 #6 全绿，#5 基础失败阻止后续合入；不能据此声称仓库已配置强制保护 |
+| CPU-07 | 固定源码 router，单/双 worker、P/D 预算和元数据、失败/断连 | 真实转发正确、无意外重放；内部 P 输出不泄漏 | 第二轮文档分支真实 router/SSH 全部通过（共 18 项）；进程退出竞态的后续独立修复仍待托管复测，详见 testing.md |
+| CPU-08 | 临时 sshd、严格 host key、controller 与恢复 CLI | 未信任 host 拒绝；重复 up 不增进程；启动失败回滚；down 无持有进程残留 | 第二轮文档分支真实 router/SSH 全部通过（共 18 项）；进程退出竞态的后续独立修复仍待托管复测，详见 testing.md |
+| CPU-09 | 真实 router → HTTP P/D StageEngine → CPU 数组复制 | 输出/usage 与完整 CPU Prefill 基线一致，D 只恢复最后 prompt token，结束后无占用块 | 第二轮文档分支 3 项真实 router → StageEngine 用例全部通过；KV 为进程内数组，不是跨进程传输 |
 
 本地干净安装首次复测遗漏创建 `artifacts/`，出现 5 passed / 38 errors；原因是 `--basetemp` 的父目录不存在。工作流已有 `mkdir -p artifacts`，已修正文档的复现命令并重跑得到上表结果。工作区证据保存于 `../../output/ci-workflow-audit-20261115/`（不随仓库发布）：`cpu-tests.xml`、初次失败报告、`ci-validation.json`。3 份 Issue 模板元数据、PR 模板、36 个本地文档链接和 `git diff --check` 均已检查。耗时只是单次本地正确性运行记录，不是性能结论。
 

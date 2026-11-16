@@ -36,7 +36,7 @@ Linux 请求检查也先按[请求示例](../examples/server.md#qwen-请求检�
 
 ## 当前 CPU 部署验证
 
-2026-11-16 首次拆分 PR 的托管 CI 已运行并暴露失败；本地修正完成，但尚未推送复测。最新状态见下方“首次托管 CI 与修正”，本节原有结果仅代表当时的 Windows 验证快照。
+2026-11-16 首轮修正已推送，服务实现 #4 已合入，文档分支的 18 项真实 Linux 集成已通过；后续发现的退出竞态已本地修正，尚未推送。最新状态见下方“第二轮托管 CI 与退出竞态”，本节原有结果仅代表当时的 Windows 验证快照。
 
 状态：本地阶段性验证，完整 CPU 集成尚未完成。2026-11-16，Windows + CPython 3.12.13；基线为 `2d61a9c8aa6eaf7eb6a928b1331f67418b5bd79b`，以下结果包含 `feat/rfc-cpu-deployment` 工作区未提交的实现。新改动没有远程 CI 结果。
 
@@ -149,3 +149,15 @@ P/D controller 正向用例在测试内部注入 `cpu-test` 期望能力，与 w
 - 七项 SSH 用例均被 sshd 以 `bad ownership or modes for directory /tmp` 拒绝。夹具私有临时目录迁到当前用户 home 下，继续使用 0700 目录、0600 authorized_keys、`StrictModes yes` 和严格 host key 校验；目录仍不在 artifact 上传范围。未关闭 SSH 检查来绕过失败。
 
 修正后的 Ruff、compileall、6 项 JUnit 校验器测试通过；18 项集成可收集，但修正后的真实 Linux 构建、SSH 和 router 测试仍待推送后执行。只有三项 job 及 ci-gate 全部成功才能继续合并。CUDA、真实模型与生产 NIXL/P/D 仍不属于这些 CPU 结果。
+
+## 第二轮托管 CI 与退出竞态
+
+上述首轮修正推送后，[服务实现 #4 的 CI](https://github.com/yangjingo/nano-xpu/actions/runs/43785860890) 在 Linux 得到 **272 项基础测试通过（22.86s）**，static、cpu 和 ci-gate 全部成功，已合入 main，merge commit 为 `06200d463a3ed70a8fcc4efaec002345251a03b0`。
+
+[文档分支第二轮 CI](https://github.com/yangjingo/nano-xpu/actions/runs/43785859861) 的 static、cpu、cpu-integration 和 ci-gate 全部通过；真实 Linux router/SSH **18 项通过（42.63s）**，零失败、错误或跳过。构建收据确认启用了 `serde_json/float_roundtrip`。这证明该提交的真实转发、SSH 编排和 CPU 阶段集成通过，仍不是 CUDA、跨机 GPU 或生产 NIXL 的验收。
+
+[CI 分支第二轮运行](https://github.com/yangjingo/nano-xpu/actions/runs/43785860377) 的真实 router/SSH 集成也已通过，但基础套件为 **271 通过、1 失败（27.50s）**，ci-gate 因此失败：`test_stop_wrong_owner_does_not_kill_worker` 已成功拒绝错误 owner，失败发生在 finally 中正确 owner 的停止清理，helper 返回 AccessDenied。相同基础实现另一轮通过，不能把它当成问题消失。
+
+原身份读取先检查存活，再读环境与命令，进程可能在这两个步骤之间退出，Linux 的 `/proc` 字段随之变得不可读。本地独立修复 `43c70d4` 在遇到 AccessDenied 后重新读取进程状态：只有确认 zombie/dead 或进程已消失才按退出处理；仍存活时保留权限错误，不发送信号、不放宽 owner/PID 校验。四项确定性回归模拟状态检查与环境读取之间的退出，修复前 3 失败、1 通过；修复后相关 **34 项通过（24.59s）**，完整 Windows / CPython 3.12.13 基础套件 **276 项通过（91.51s）**。Ruff、compileall、actionlint 及 6 项 JUnit 校验器测试通过。
+
+新修复尚未推送，Linux 退出竞态修正结果仍待 CI。为保持 PR 范围清楚，进程修复单独准备 PR，再由 CI 与文档分支继承；不以第二轮某一分支的绿色结果覆盖另一分支已经暴露的失败。工作区证据位于 `output/pr-split-20261116/exit-race-before.xml`、`exit-race-targeted.xml`、`exit-race-cpu.xml`、`fix-pr5-cpu.log` 和 `fix-pr6-integration.log`。
