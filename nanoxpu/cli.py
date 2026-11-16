@@ -1,6 +1,6 @@
 import argparse
 
-from nanovllm.server.config import ServerConfig
+from nanoxpu.server.config import ServerConfig
 
 
 def parse_config(argv=None):
@@ -29,11 +29,11 @@ def parse_config(argv=None):
 def main(argv=None):
     config = parse_config(argv)
     try:
-        from nanovllm.server.app import create_app
-        from nanovllm.server.runtime import run_server
+        from nanoxpu.server.app import create_app
+        from nanoxpu.server.runtime import run_server
     except ImportError as exc:
-        raise SystemExit("Server dependencies are missing; install nano-vllm[server].") from exc
-    from nanovllm.server.engine import NanoEngine
+        raise SystemExit("Server dependencies are missing; install nano-xpu[server].") from exc
+    from nanoxpu.server.engine import NanoEngine
 
     # A single web worker owns the engine; no reload or process pool.
     app = create_app(config, NanoEngine)

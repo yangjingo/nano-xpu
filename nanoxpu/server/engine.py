@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from typing import Protocol
 
-from nanovllm.server.config import ServerConfig
-from nanovllm.server.schema import ChatRequest
+from nanoxpu.server.config import ServerConfig
+from nanoxpu.server.schema import ChatRequest
 
 
 class InvalidRequest(ValueError):
@@ -35,7 +35,7 @@ class NanoEngine:
         if not torch.cuda.is_available():
             raise RuntimeError("nano-xpu inference requires CUDA; no CPU inference backend is available")
         from transformers import AutoConfig
-        from nanovllm import LLM
+        from nanoxpu import LLM
 
         config = self.config
         hf_config = AutoConfig.from_pretrained(config.model, local_files_only=True)
@@ -60,7 +60,7 @@ class NanoEngine:
         )
 
     def complete(self, request):
-        from nanovllm import SamplingParams
+        from nanoxpu import SamplingParams
 
         tokens = self.llm.tokenizer.apply_chat_template(
             [message.model_dump() for message in request.messages],

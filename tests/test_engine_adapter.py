@@ -3,11 +3,11 @@ from types import SimpleNamespace
 import sys
 
 import pytest
-import nanovllm
+import nanoxpu
 
-from nanovllm.server.config import ServerConfig
-from nanovllm.server.engine import InvalidRequest, NanoEngine
-from nanovllm.server.schema import ChatRequest
+from nanoxpu.server.config import ServerConfig
+from nanoxpu.server.engine import InvalidRequest, NanoEngine
+from nanoxpu.server.schema import ChatRequest
 
 
 class Tokenizer:
@@ -46,7 +46,7 @@ def engine(tmp_path, monkeypatch):
                          hidden_size=1024, intermediate_size=4096, vocab_size=1000)
     monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(cuda=SimpleNamespace(is_available=lambda: True, device_count=lambda: 2)))
     monkeypatch.setitem(sys.modules, "transformers", SimpleNamespace(AutoConfig=SimpleNamespace(from_pretrained=lambda *args, **kwargs: hf)))
-    monkeypatch.setitem(nanovllm.__dict__, "LLM", LLMStub)
+    monkeypatch.setitem(nanoxpu.__dict__, "LLM", LLMStub)
     config = ServerConfig(str(tmp_path), tensor_parallel_size=2,
                           distributed_port=2444, max_num_batched_tokens=128, max_num_seqs=32)
     adapter = NanoEngine(config)
@@ -103,6 +103,6 @@ def test_bad_tp_model_dimensions_fail_before_model_load(tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(cuda=SimpleNamespace(is_available=lambda: True, device_count=lambda: 2)))
     hf = SimpleNamespace(model_type="qwen3", max_position_embeddings=8192, num_attention_heads=15)
     monkeypatch.setitem(sys.modules, "transformers", SimpleNamespace(AutoConfig=SimpleNamespace(from_pretrained=lambda *args, **kwargs: hf)))
-    monkeypatch.setitem(nanovllm.__dict__, "LLM", LLMStub)
+    monkeypatch.setitem(nanoxpu.__dict__, "LLM", LLMStub)
     with pytest.raises(ValueError, match="num_attention_heads"):
         NanoEngine(ServerConfig(str(tmp_path), tensor_parallel_size=2)).start()

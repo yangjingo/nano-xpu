@@ -1,4 +1,4 @@
-from nanovllm.cli import main
+from nanoxpu.cli import main
 
 if __name__ == "__main__":
     main()

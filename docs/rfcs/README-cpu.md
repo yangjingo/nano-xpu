@@ -29,10 +29,10 @@ uv pip install --python $python312 --target .cpu-deps -r tests/requirements-cpu.
 uv pip install --python $python312 --target .cpu-deps --no-deps -e .
 $env:PYTHONPATH = Join-Path (Get-Location) '.cpu-deps'
 & $python312 -m pytest -q tests
-& $python312 -m nanovllm serve --help
+& $python312 -m nanoxpu serve --help
 ```
 
-`.cpu-deps` 和 `.venv-server` 均不提交。安装元数据中的 `nano-xpu` 入口已由测试加载校验，本机 CLI 行为通过等价的 `python -m nanovllm` 入口验证；Windows 生成的 console launcher 已尝试启动但被 Application Control 拦截，不能标为运行通过。
+`.cpu-deps` 和 `.venv-server` 均不提交。安装元数据中的 `nano-xpu` 入口已由测试加载校验，本机 CLI 行为通过等价的 `python -m nanoxpu` 入口验证；Windows 生成的 console launcher 已尝试启动但被 Application Control 拦截，不能标为运行通过。
 
 ## 手动启动 CPU 测试服务
 

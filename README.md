@@ -33,6 +33,9 @@ Available today (inherited and extended from nano-vllm):
 pip install git+https://github.com/yangjingo/nano-xpu.git
 ```
 
+Python imports now use `nanoxpu`; the distribution and CLI are `nano-xpu`.
+Update existing imports and uninstall the old `nano-vllm` distribution before reinstalling this checkout.
+
 ## Model Download
 
 To download model weights manually:
@@ -49,7 +52,7 @@ See `example.py`. The API mirrors vLLM's interface with minor differences in
 `LLM.generate`:
 
 ```python
-from nanovllm import LLM, SamplingParams
+from nanoxpu import LLM, SamplingParams
 
 llm = LLM("/YOUR/MODEL/PATH", enforce_eager=True, tensor_parallel_size=1)
 sampling_params = SamplingParams(temperature=0.6, max_tokens=256)

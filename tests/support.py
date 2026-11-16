@@ -1,7 +1,7 @@
 """CPU-only test engine. No model is loaded and no model output is claimed."""
 import threading
 
-from nanovllm.server.engine import Completion, InvalidRequest
+from nanoxpu.server.engine import Completion, InvalidRequest
 
 
 class TestEngine:
