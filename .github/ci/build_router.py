@@ -11,6 +11,7 @@ import sys
 REVISION = "07c20da66c255ba65a97ab531f9fb5f60413a7d4"
 REPOSITORY = "https://github.com/vllm-project/router.git"
 RUST = "1.95.0"  # Upstream .buildkite/test-ready.yml at REVISION.
+FEATURES = "serde_json/float_roundtrip"
 
 
 def run(*command, cwd=None, capture=False):
@@ -36,7 +37,9 @@ def main():
     assert not run("git", "status", "--porcelain", cwd=source, capture=True).stdout.strip()
     run("rustup", "toolchain", "install", RUST, "--profile", "minimal")
     os.environ.update(CARGO_INCREMENTAL="0", CARGO_PROFILE_DEV_DEBUG="0", CARGO_BUILD_JOBS="2")
-    run("cargo", "+" + RUST, "build", "--locked", "--bin", "vllm-router", cwd=source)
+    # HTTP KV metadata includes an f64 deadline. Preserve its exact value through
+    # serde_json parsing so the decode worker can verify the registered export.
+    run("cargo", "+" + RUST, "build", "--locked", "--features", FEATURES, "--bin", "vllm-router", cwd=source)
     output = args.output.resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source / "target/debug/vllm-router", output)
@@ -50,7 +53,8 @@ def main():
     receipt = {"revision": REVISION, "repository": REPOSITORY, "sha256": binary_hash,
                "cargo_lock_sha256": hashlib.sha256((source / "Cargo.lock").read_bytes()).hexdigest(),
                "rustc": run("rustc", "+" + RUST, "--version", capture=True).stdout.strip(),
-               "version": run(str(output), "--version", capture=True).stdout.strip(), "profile": "dev, debug=0"}
+               "version": run(str(output), "--version", capture=True).stdout.strip(), "profile": "dev, debug=0",
+               "features": FEATURES.split(",")}
     Path(str(output) + ".source.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
     Path(str(output) + ".help.txt").write_text(help_text, encoding="utf-8")
     print(json.dumps(receipt, indent=2))
