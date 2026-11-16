@@ -1,6 +1,16 @@
-# Issue 与 PR 模板
+# GitHub 协作与 CI
 
 贡献入口见 [CONTRIBUTING.md](../CONTRIBUTING.md)，本地检查和 required check 配置见 [CPU CI 指南](../docs/ci.md)。
+
+## 目录安排
+
+- `workflows/`：GitHub Actions 工作流，定义触发条件、任务与 gate。
+- `ci/`：工作流调用的 Python 脚本、脚本测试与检查依赖；也可在仓库根目录直接执行。
+- `ISSUE_TEMPLATE/` 和 `pull_request_template.md`：Issue、RFC 与 PR 模板。
+
+项目功能测试保留在根目录的 `tests/` 和 `integration/`。`.github/ci/` 仅放 CI 支持代码，避免将应用测试混入工作流配置。
+
+## Issue 与 PR 模板
 
 | 用途 | 模板 | 需要说明什么 |
 |---|---|---|

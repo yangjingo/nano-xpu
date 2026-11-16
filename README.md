@@ -33,8 +33,8 @@ Available today (inherited and extended from nano-vllm):
 pip install git+https://github.com/yangjingo/nano-xpu.git
 ```
 
-Python imports now use `nanoxpu`; the distribution and CLI are `nano-xpu`.
-Update existing imports and uninstall the old `nano-vllm` distribution before reinstalling this checkout.
+The Python package is `nanoxpu`; the distribution and CLI are `nano-xpu`.
+For existing installations, see the [package migration steps](docs/deployment.md).
 
 ## Model Download
 
@@ -103,10 +103,26 @@ For the full stage-by-stage plan — including the Ascend-first PD path
 
 The serving plan is **[RFC-0001: `nano-xpu serve`, model splitting, and CPU-first
 validation](docs/rfcs/0001-serve-qwen-colocated.md)**. The CLI and HTTP service layer
-are implemented with **43 passing CPU tests**. Real Qwen inference, CUDA, and
+have a historical S0 record of **43 passing CPU tests**. Real Qwen inference, CUDA, and
 multi-GPU TP serving remain **unverified on hardware**. See the
-[CPU verification guide](docs/rfcs/README-cpu.md) for setup and a test-only server;
+[CPU verification guide](docs/testing.md) for setup and a test-only server;
 the production CLI uses the CUDA engine and has no CPU inference fallback.
+
+Start all serving modes from a cluster configuration, including a single colocated
+worker behind the router. Prepare the profile and hosts as described in the
+[deployment guide](docs/deployment.md), save the YAML blocks from the
+[deployment examples](examples/deploy.md) into your working directory, then use:
+
+```bash
+nano-xpu serve plan -f ./cluster-colocated.yaml
+nano-xpu serve -f ./cluster-colocated.yaml --detach
+nano-xpu serve status --name qwen-colocated
+nano-xpu serve logs --name qwen-colocated
+nano-xpu serve down --name qwen-colocated
+```
+
+`deploy ...` and `serve MODEL` have been removed. Model and device options belong
+in the YAML configuration; `_worker` is an internal supervisor entry point.
 
 For new proposals, use the [RFC template](.github/ISSUE_TEMPLATE/rfc.md) and
 the [RFC writing guide and index](docs/rfcs/README.md).
@@ -129,7 +145,3 @@ core inference engine goes to the nano-vllm project.
 ## License
 
 [MIT](LICENSE)
-
-## Configuration-driven serving
-
-Use `nano-xpu serve -f cluster.yaml` for all public serving modes. See the [deployment guide](docs/deployment.md) and [documented examples](examples/deploy.md). The internal worker is launched by the controller; direct model arguments are no longer accepted. CPU control tests do not validate real GPU/NIXL serving.

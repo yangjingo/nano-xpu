@@ -16,11 +16,17 @@ Nano-XPU 基于 [nano-vllm](https://github.com/GeeeekExplorer/nano-vllm) 演进�
 
 ### 当前优先交付：Server 拉起 Qwen P/D 合部服务
 
-先完成本地 CPU 服务链路验证，再通过 `nano-xpu serve <model-path>` 验收 CUDA 上的 Qwen3 P/D 合部、TP 多卡切分和 chunked prefill，随后推进多实例、Ascend 合部与 P/D 分离。具体 Issue 草案、接口、示例脚本和验收见 [RFC-0001：通过 nano-xpu serve 启动 Qwen P/D 合部服务](rfcs/0001-serve-qwen-colocated.md)。
+先完成本地 CPU 服务链路验证，再通过 `nano-xpu serve -f cluster.yaml` 验收 CUDA 上的 Qwen3 P/D 合部、TP 多卡切分和 chunked prefill，随后推进多实例、Ascend 合部与 P/D 分离。具体 Issue 草案、接口、示例脚本和验收见 [RFC-0001：通过 nano-xpu serve 启动 Qwen P/D 合部服务](rfcs/0001-serve-qwen-colocated.md)。
 
-该 RFC 状态为**草案；S0 服务层已实现并通过 43 项 CPU 测试，真实 Qwen/CUDA/TP 待设备验收**。首版“混合部署”指 Prefill/Decode 合部执行；不代表 GPU/NPU 异构协同已经可用。RFC 的 S0–S5 为服务化交付顺序，本文件 Phase 0–5 为异构运行时演进，两者分别验收；当前已完成 S0，下一步为 S1，不以完整后端抽象为其前置条件。
+该 RFC 方案状态仍为**草案；S0 服务层已有历史 43 项 CPU 测试，真实 Qwen/CUDA/TP 待设备验收**。当前分支继续扩充了进程清理与 Scheduler 回归，最新结果见 [CPU 验证报告](testing.md)。首版“混合部署”指 Prefill/Decode 合部执行；不代表 GPU/NPU 异构协同已经可用。RFC 的 S0–S5 为服务化交付顺序，本文件 Phase 0–5 为异构运行时演进，两者分别验收；S1 的设备门槛不能由 S0 或 CPU 部署测试替代。
 
 ---
+
+### 第二个任务：统一 CLI、vllm-router 与 P/D 部署
+
+[RFC-0002](rfcs/0002-router-oneclick-pd.md) 定义将单 worker 服务和部署管理统一到配置驱动的 `nano-xpu serve`，按角色 IP/卡号一键拉起合部或分离集群；两种模式（包括单 worker 合部）都必须接入 router。RFC 已拆出 T2-01～T2-19 的依赖、代码落点与验收 Gate。当前 `feat/rfc-cpu-deployment` 工作区基于 `2d61a9c8aa6eaf7eb6a928b1331f67418b5bd79b`，已部分实现配置、进程编排、角色 HTTP、descriptor/lease 和 CPU 阶段控制，尚未提交发布。18 项真实 router/SSH Linux 集成仅完成收集，生产 NIXL/P/D 后端未实现；设备交付仍需真实 router 合部 → NIXL spike → 阶段后端 → 同机/跨机验收，不能把 CPU 结果写成真实 P/D 可用。
+
+本文件第 4～9 节描述长期异构目标，不代表当前接口或已交付能力。近期同型号 CUDA 的实现合同以 RFC-0002 为准：TP=1、NIXL pull、D 重算最后一枚 prompt token；不交接 P 的随机采样状态。下文跨厂商 Host Staging、采样状态和扩展布局属于后续设计，不能直接套到当前 descriptor，也不改变 Ascend/跨厂商能力的设备 Gate。
 
 ## 1. 项目定位
 
